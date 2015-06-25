@@ -160,11 +160,28 @@ def upload_reports(ctx, src, dst="s3n://ooni-private/reports-raw/yaml/",
         timer.start()
         if limit is not None:
             limit = int(limit)
-        from pipeline.batch import upload_reports
-        uploaded_reports = upload_reports.run(src_directory=src, dst=dst,
+        from pipeline.batch import import_ooni
+        uploaded_reports = import_ooni.run(src_directory=src, dst=dst,
                                               worker_processes=workers,
                                               limit=limit, move=move)
         logger.info("upload_reports runtime: %s" % timer.stop())
+    finally:
+        if halt:
+            ctx.run("sudo halt")
+    return uploaded_reports
+
+
+@task(setup_remote_syslog)
+def import_satellite(ctx, src="s3n://ooni-incoming/satellite",
+                     dst="s3n://ooni-private/reports-raw/satellite/",
+                     workers=16, move=True, halt=False):
+    try:
+        timer = Timer()
+        timer.start()
+        from pipeline.batch import import_satellite
+        uploaded_reports = import_satellite.run(src_directory=src, dst=dst,
+                                                worker_processes=workers,
+                                                move=move)
     finally:
         if halt:
             ctx.run("sudo halt")
@@ -206,7 +223,7 @@ def add_headers_to_db(ctx, date_interval=None, workers=16,
         timer = Timer()
         timer.start()
         from pipeline.batch import add_headers_to_db
-        uploaded_dates = upload_reports(ctx, src="s3n://ooni-incoming/", workers=workers, move=True)
+        uploaded_dates = upload_reports(ctx, src="s3n://ooni-incoming/ooniprobe", workers=workers, move=True)
         if not date_interval:
             for uploaded_date in uploaded_dates:
                 logger.info("Running add_headers_to_db for date %s" % uploaded_date)
@@ -298,4 +315,5 @@ def spark_apps(ctx, date_interval, src="s3n://ooni-public/reports-sanitised/stre
 
 
 ns = Collection(upload_reports, generate_streams, list_reports, clean_streams,
-                add_headers_to_db, start_computer, sync_reports, spark_apps, spark_submit)
+                import_satellite, add_headers_to_db, start_computer, sync_reports,
+                spark_apps, spark_submit)

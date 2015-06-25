@@ -72,7 +72,8 @@ def list_report_files(directory, aws_access_key_id=None,
                       no_host_key_check=False,
                       recursive=True):
     def is_report_file(filename):
-        possible_extensions = (".yamloo", ".yamloo.gz", ".yaml", "yaml.gz")
+        possible_extensions = (".yamloo", ".yamloo.gz", ".yaml",
+                               "yaml.gz", ".json")
         if any(filename.endswith(ext) for ext in possible_extensions):
             return True
         return False
