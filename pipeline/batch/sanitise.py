@@ -18,31 +18,66 @@ config = Config(runtime_path="invoke.yaml")
 logger = logging.getLogger('ooni-pipeline')
 
 
-class AggregateYAMLReports(ExternalTask):
+class AggregateReports(ExternalTask):
     src = luigi.Parameter()
     dst_private = luigi.Parameter()
     dst_public = luigi.Parameter()
 
     date = luigi.DateParameter()
-    bridge_db = {}
+    software_name = luigi.Parameter()
 
     def output(self):
         sanitised_streams = get_luigi_target(os.path.join(
             self.dst_public,
             "reports-sanitised",
             "streams",
+            self.software_name,
             self.date.strftime("%Y-%m-%d.json")
         ))
         raw_streams = get_luigi_target(os.path.join(
             self.dst_private,
             "reports-raw",
             "streams",
+            self.software_name,
             self.date.strftime("%Y-%m-%d.json")
         ))
         return {
             "raw_streams": raw_streams,
             "sanitised_streams": sanitised_streams
         }
+
+    def before_run(self):
+        pass
+
+    def run(self):
+        self.before_run()
+
+        output = self.output()
+        raw_streams = output["raw_streams"].open('w')
+        sanitised_streams = output["sanitised_streams"].open('w')
+
+        reports_path = os.path.join(self.src,
+                                    self.date.strftime("%Y-%m-%d"))
+        logger.debug("listing path %s" % reports_path)
+        for filename in list_report_files(reports_path,
+                                          config.aws.access_key_id,
+                                          config.aws.secret_access_key):
+            logger.debug("got filename %s" % filename)
+            try:
+                self.process_report(filename, sanitised_streams, raw_streams)
+            except Exception:
+                logger.error("error in processing %s" % filename)
+                logger.error(traceback.format_exc())
+        raw_streams.close()
+        sanitised_streams.close()
+
+
+class AggregateYAMLReports(AggregateReports):
+    bridge_db = {}
+
+    def before_run(self):
+        with get_luigi_target(config.ooni.bridge_db_path).open('r') as f:
+            self.bridge_db = json.load(f)
 
     def process_report(self, filename, sanitised_streams, raw_streams):
         target = get_luigi_target(filename)
@@ -74,28 +109,16 @@ class AggregateYAMLReports(ExternalTask):
                     logger.error(traceback.format_exc())
         sanitised_yaml.close()
 
-    def run(self):
-        with get_luigi_target(config.ooni.bridge_db_path).open('r') as f:
-            self.bridge_db = json.load(f)
 
-        output = self.output()
-        raw_streams = output["raw_streams"].open('w')
-        sanitised_streams = output["sanitised_streams"].open('w')
-
-        reports_path = os.path.join(self.src,
-                                    self.date.strftime("%Y-%m-%d"))
-        logger.debug("listing path %s" % reports_path)
-        for filename in list_report_files(reports_path,
-                                          config.aws.access_key_id,
-                                          config.aws.secret_access_key):
-            logger.debug("got filename %s" % filename)
-            try:
-                self.process_report(filename, sanitised_streams, raw_streams)
-            except Exception:
-                logger.error("error in processing %s" % filename)
-                logger.error(traceback.format_exc())
-        raw_streams.close()
-        sanitised_streams.close()
+class AggregateJSONReports(AggregateReports):
+    def process_report(self, filename, sanitised_streams, raw_streams):
+        target = get_luigi_target(filename)
+        with target.open('r') as in_file:
+            for line in in_file:
+                # XXX there is currently no need to duplicate this in the raw
+                # streams directory
+                # raw_streams.write(line)
+                sanitised_streams.write(line)
 
 
 class RawReportsSanitiser(luigi.Task):

@@ -1,5 +1,4 @@
 import logging
-import json
 
 import luigi
 import luigi.worker
@@ -7,11 +6,11 @@ import luigi.postgres
 
 from invoke.config import Config
 
-from pipeline.helpers.util import json_loads, get_date_interval, get_luigi_target
+from pipeline.helpers.util import json_loads, get_date_interval
 from pipeline.helpers.util import get_imported_dates
 from pipeline.helpers.report import header_avro
 
-from pipeline.batch.sanitise import AggregateYAMLReports
+from pipeline.batch.sanitise import AggregateYAMLReports, AggregateJSONReports
 
 config = Config(runtime_path="invoke.yaml")
 logger = logging.getLogger('ooni-pipeline')
@@ -31,6 +30,7 @@ class ReportHeadersToDatabase(luigi.postgres.CopyToTable):
     dst_public = luigi.Parameter()
 
     date = luigi.DateParameter()
+    software_name = luigi.Parameter()
 
     host = str(config.postgres.host)
     database = str(config.postgres.database)
@@ -41,10 +41,18 @@ class ReportHeadersToDatabase(luigi.postgres.CopyToTable):
     columns = columns
 
     def requires(self):
-        return AggregateYAMLReports(dst_private=self.dst_private,
-                                    dst_public=self.dst_public,
-                                    src=self.src,
-                                    date=self.date)
+        if self.software_name == "ooniprobe":
+            return AggregateYAMLReports(dst_private=self.dst_private,
+                                        dst_public=self.dst_public,
+                                        src=self.src,
+                                        date=self.date,
+                                        software_name=self.software_name)
+        elif self.software_name == "satellite":
+            return AggregateJSONReports(dst_private=self.dst_private,
+                                        dst_public=self.dst_public,
+                                        src=self.src,
+                                        date=self.date,
+                                        software_name=self.software_name)
 
     def format_record(self, record):
         fields = []
@@ -67,7 +75,8 @@ class ReportHeadersToDatabase(luigi.postgres.CopyToTable):
                     logger.info("Found header")
                     yield self.format_record(record)
 
-def run(src, dst_private, dst_public, date_interval, worker_processes=16):
+def run(src, dst_private, dst_public, date_interval, worker_processes=16,
+        software_name="ooniprobe"):
     sch = luigi.scheduler.CentralPlannerScheduler()
     w = luigi.worker.Worker(scheduler=sch,
                             worker_processes=worker_processes)
@@ -82,7 +91,8 @@ def run(src, dst_private, dst_public, date_interval, worker_processes=16):
         logging.info("adding headers for date: %s" % date)
         task = ReportHeadersToDatabase(dst_private=dst_private,
                                        dst_public=dst_public,
-                                       src=src, date=date)
+                                       src=src, date=date,
+                                       software_name=software_name)
         w.add(task)
     w.run()
     w.stop()

@@ -218,7 +218,9 @@ def clean_streams(ctx, dst_private="s3n://ooni-private/",
 def add_headers_to_db(ctx, date_interval=None, workers=16,
                       src="s3n://ooni-private/reports-raw/yaml/",
                       dst_private="s3n://ooni-private/",
-                      dst_public="s3n://ooni-public/", halt=False):
+                      dst_public="s3n://ooni-public/",
+                      software_name="ooniprobe",
+                      halt=False):
     try:
         timer = Timer()
         timer.start()
@@ -229,12 +231,12 @@ def add_headers_to_db(ctx, date_interval=None, workers=16,
                 logger.info("Running add_headers_to_db for date %s" % uploaded_date)
                 add_headers_to_db.run(src=src, date_interval=uploaded_date,
                                     worker_processes=workers, dst_private=dst_private,
-                                    dst_public=dst_public)
+                                    dst_public=dst_public, software_name=software_name)
         else:
             logger.info("Running add_headers_to_db for date %s" % date_interval)
             add_headers_to_db.run(src=src, date_interval=date_interval,
                                 worker_processes=workers, dst_private=dst_private,
-                                dst_public=dst_public)
+                                dst_public=dst_public, software_name=software_name)
         logger.info("add_headers_to_db runtime: %s" % timer.stop())
     finally:
         if halt:
@@ -257,6 +259,8 @@ def sync_reports(ctx,
             logger.info("* %s" % report_file)
         start_computer(ctx, instance_type="m3.xlarge",
                     invoke_command="add_headers_to_db --workers=4 --halt".format(date=date))
+        start_computer(ctx, instance_type="m3.xlarge",
+                       invoke_command="add_headers_to_db --src=s3n://ooni-private/reports-raw/satellite --software-name=satellite --workers=4 --halt".format(date=date))
         logger.info("sync_reports runtime: %s" % timer.stop())
     finally:
         if halt:
