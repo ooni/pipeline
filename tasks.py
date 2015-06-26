@@ -258,9 +258,9 @@ def sync_reports(ctx,
         for report_file in report_files:
             logger.info("* %s" % report_file)
         start_computer(ctx, instance_type="m3.xlarge",
-                    invoke_command="add_headers_to_db --workers=4 --halt".format(date=date))
+                    invoke_command="add_headers_to_db --date-interval {date} --workers=4 --halt".format(date=date))
         start_computer(ctx, instance_type="m3.xlarge",
-                       invoke_command="add_headers_to_db --src=s3n://ooni-private/reports-raw/satellite --software-name=satellite --workers=4 --halt".format(date=date))
+                       invoke_command="add_headers_to_db --date-interval {date} --src=s3n://ooni-private/reports-raw/satellite --software-name=satellite --workers=4 --halt".format(date=date))
         logger.info("sync_reports runtime: %s" % timer.stop())
     finally:
         if halt:
