@@ -1,5 +1,5 @@
 import logging
-import json
+from datetime import datetime
 
 import luigi
 import luigi.worker
@@ -7,23 +7,13 @@ import luigi.postgres
 
 from invoke.config import Config
 
-from pipeline.helpers.util import json_loads, get_date_interval, get_luigi_target
-from pipeline.helpers.util import get_imported_dates
-from pipeline.helpers.report import header_avro
+from pipeline.helpers.util import json_loads, get_date_interval
+from pipeline.helpers.util import get_imported_dates, json_dumps
 
 from pipeline.batch.sanitise import AggregateYAMLReports
 
 config = Config(runtime_path="invoke.yaml")
 logger = logging.getLogger('ooni-pipeline')
-
-columns = []
-for field in header_avro["fields"]:
-    if field["type"] == "string":
-        columns.append((field["name"], "TEXT"))
-    elif field["type"] == "array":
-        columns.append((field["name"], "TEXT"))
-    elif field["type"] == "float":
-        columns.append((field["name"], "FLOAT"))
 
 class ReportHeadersToDatabase(luigi.postgres.CopyToTable):
     src = luigi.Parameter()
@@ -38,7 +28,21 @@ class ReportHeadersToDatabase(luigi.postgres.CopyToTable):
     password = str(config.postgres.password)
     table = str(config.postgres.table)
 
-    columns = columns
+    columns = [
+        ('input', 'TEXT'),
+        ('report_id', 'TEXT'),
+        ('report_filename', 'TEXT'),
+        ('options', 'JSONB'),
+        ('probe_cc', 'TEXT'),
+        ('probe_asn', 'TEXT'),
+        ('probe_ip', 'TEXT'),
+        ('data_format_version', 'TEXT'),
+        ('test_name', 'TEXT'),
+        ('test_start_time', 'TIMESTAMP'),
+        ('test_runtime', 'REAL'),
+        ('test_helpers', 'JSONB'),
+        ('test_keys', 'JSONB')
+    ]
 
     def requires(self):
         return AggregateYAMLReports(dst_private=self.dst_private,
@@ -46,16 +50,26 @@ class ReportHeadersToDatabase(luigi.postgres.CopyToTable):
                                     src=self.src,
                                     date=self.date)
 
-    def format_record(self, record):
-        fields = []
-        for field in header_avro["fields"]:
-            if field["type"] == "string":
-                fields.append(str(record.get(field["name"], "")))
-            elif field["type"] == "array":
-                fields.append(str(record.get(field["name"], "")))
-            elif field["type"] == "float":
-                fields.append(float(record.get(field["name"], 0)))
-        return fields
+    def format_record(self, entry):
+        record = []
+        for (col_name, col_type) in self.columns:
+            if col_name == 'test_keys': # this column gets a json_dump of whatever's left
+                continue
+            elif col_name == 'test_start_time': # Entry is actually called start_time
+                start_time = entry.pop('start_time')
+                test_start_time = datetime.fromtimestamp(start_time).strftime("%Y-%m-%d %H:%M:%S")
+                record.append(test_start_time)
+            elif col_type == 'JSONB':
+                record.append(json_dumps(entry.pop(col_name, None)))
+            elif col_type == 'INTEGER':
+                try:
+                    record.append(int(entry.pop(col_name)))
+                except KeyError:
+                    record.append(None)
+            else:
+                record.append(entry.pop(col_name, None))
+        record.append(json_dumps(entry))
+        return record
 
     def rows(self):
         sanitised_streams = self.input()["sanitised_streams"]
@@ -63,8 +77,8 @@ class ReportHeadersToDatabase(luigi.postgres.CopyToTable):
             for line in in_file:
                 record = json_loads(line.strip('\n'))
                 logger.info("Looking at %s with id %s" % (record["record_type"], record["report_id"]))
-                if record["record_type"] == "header":
-                    logger.info("Found header")
+                if record["record_type"] == "entry":
+                    logger.info("Found entry")
                     yield self.format_record(record)
 
 def run(src, dst_private, dst_public, date_interval, worker_processes=16):
@@ -85,4 +99,3 @@ def run(src, dst_private, dst_public, date_interval, worker_processes=16):
                                        src=src, date=date)
         w.add(task, multiprocess=True)
     w.run()
-    w.stop()

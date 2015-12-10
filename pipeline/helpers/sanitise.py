@@ -12,6 +12,7 @@ class Sanitisers(object):
         return entry
 
     def http_requests(self, entry):
+        entry['test_name'] = 'http_requests'
         return entry
 
     def scapy_template(self, entry):
@@ -21,9 +22,17 @@ class Sanitisers(object):
         return entry
 
     def dns_consistency(self, entry):
+        entry['test_name'] = 'dns_consistency'
+        tampered_resolvers = []
+        for k, v in entry['tampering'].items():
+            if v == True:
+                tampered_resolvers.append(k)
+        entry['tampered_resolvers'] = tampered_resolvers
+        entry['tampering_detected'] = len(tampered_resolvers) > 0
         return entry
 
     def captive_portal(self, entry):
+        entry['test_name'] = 'captive_portal'
         return entry
 
     def null(self, entry):
@@ -40,6 +49,7 @@ class Sanitisers(object):
         return entry
 
     def bridge_reachability(self, entry):
+        entry['test_name'] = 'bridge_reachability'
         if not entry.get('bridge_address'):
             entry['bridge_address'] = entry['input']
 
@@ -70,6 +80,19 @@ class Sanitisers(object):
 
     def tcp_connect(self, entry):
         entry = self.bridge_reachability_tcp_connect(entry)
+        entry['test_name'] = 'tcp_connect'
+        return entry
+
+    def http_header_field_manipulation(self, entry):
+        entry['test_name'] = 'http_header_field_manipulation'
+        return entry
+
+    def http_invalid_request_line(self, entry):
+        entry['test_name'] = 'http_invalid_request_line'
+        return entry
+
+    def http_host(self, entry):
+        entry['test_name'] = 'http_host'
         return entry
 
     def default(self, entry):
@@ -78,8 +101,8 @@ class Sanitisers(object):
 
 def get_sanitisers(test_name):
     sanitise_mapping = {
-        "http_host": "http_template",
-        "HTTP Host": "http_template",
+        "http_host": ["http_template", "http_host"],
+        "HTTP Host": ["http_template", "http_host"],
 
         "http_requests_test": ["http_template",
                                "http_requests"],
@@ -96,11 +119,11 @@ def get_sanitisers(test_name):
         "DNS tamper": ["dns_template", "dns_consistency"],
         "dns_consistency": ["dns_template", "dns_consistency"],
 
-        "HTTP Invalid Request Line": "null",
-        "http_invalid_request_line": "null",
+        "HTTP Invalid Request Line": ["http_invalid_request_line"],
+        "http_invalid_request_line": ["http_invalid_request_line"],
 
-        "http_header_field_manipulation": "null",
-        "HTTP Header Field Manipulation": "null",
+        "http_header_field_manipulation": ["http_header_field_manipulation"],
+        "HTTP Header Field Manipulation": ["http_header_field_manipulation"],
 
         "Multi Protocol Traceroute Test": ["scapy_template"],
         "multi_protocol_traceroute_test": ["scapy_template"],
