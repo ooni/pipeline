@@ -4,52 +4,55 @@ This is the Open Observatory data processing pipeline
 
 ![ooni-pipeline architecture diagram](https://raw.githubusercontent.com/TheTorProject/ooni-pipeline/master/docs/ooni-pipeline-architecture.png)
 
-## Setup
+## Outline of the process
 
-Edit `invoke.yaml` based on `invoke.yaml.example` to contain all the relevant
-tokens.
-
-Install also all the python requirements in `requirements.txt`.
-
-## How to run the pipeline tasks
-
-To run on the AWS cloud do:
-
+### 1) backend collectors -> s3://ooni-incoming
+ooni-backend machines upload "raw reports" (yaml files) to the ooni-incoming S3 bucket. The following is run daily by cron:
 ```
-invoke start_computer
+find /data/bouncer/archive -type f -print0 \
+    | xargs -0 -I FILE \
+      aws s3 mv FILE s3://ooni-incoming/
 ```
 
-If you would like to run on the current machine the task that adds things to the
-postgres database you should run (after having installed the requirements in
-`requirements-computer.txt`)
-
+### 2) s3://ooni-incoming -> s3://ooni-private/raw-reports/yaml
+those reports get copied to the ooni-private S3 bucket (this 2nd step is for permissions separation). Another daily cron job:
 ```
-invoke add_headers_to_db
-```
+date_bin=$(date -I)
+if [ -z "$date_bin" ]; then exit -1; fi
 
-To re-run the data pipeline from scratch you shall first clean all the streams
-by running:
+# should be able to do this filtering with the aws --exclude and --include,
+# but I can't get that to work.
 
-```
-invoke clean_streams
-```
-
-Then for every date you wish to import streams on you shall run:
-
-```
-invoke add_headers_to_db --workers=NUMBER_OF_CORES $YEAR
+aws s3 ls s3://ooni-incoming \
+        | awk '{print $4}' \
+        | grep '.yamloo$' \
+        | xargs -I FILE \
+                aws s3 mv s3://ooni-incoming/FILE \
+                          s3://ooni-private/reports-raw/yaml/$date_bin/
 ```
 
-When doing this AWS it's ideal to have 1 machine per year running.
-
-This can be achieved by running the start_computer task like so:
-
+### 3) yaml raw reports -> sanitised json, aggregated by day
 ```
-invoke start_computer --invoke-command="add_headers_to_db --workers=32 --halt --date-interval=2012"
-invoke start_computer --invoke-command="add_headers_to_db --workers=32 --halt --date-interval=2013"
-invoke start_computer --invoke-command="add_headers_to_db --workers=32 --halt --date-interval=2014"
-invoke start_computer --invoke-command="add_headers_to_db --workers=32 --halt --date-interval=2015"
+invoke bins_to_sanitised_streams \
+    --unsanitised-dir "s3n://ooni-private/reports-raw" \
+    --sanitised-dir "s3n://ooni-public" \
+    --date-interval 2012-12-01-2016-01-01 \
+    --workers 32
 ```
+this command does some sanitisation and aggregates the reports by date
+(the folders ("bins") correspond to a pipeline date, not the report measurement date) 
+into json streams in the ooni-public bucket.
+
+### 4) sanitised json -> postgres DB
+```
+invoke streams_to_db --streams-dir "s3n://ooni-public/json"
+```
+this command reads the json streams and puts each report entry (there are many entries in a report) as a row into the postgres db.
+
+We currently run the bins->streams on a c3.8xlarge (32 core) with 32 processes and 80GB EBS.
+(the S3 files get cached on-disk on their way in and out, so this can eat a lot of space). It takes about a day to run through the whole dataset.
+
+The streams->db step, we run on a m4.xlarge with 1 process, and it also takes about a day to run. I haven't looked into what the speed bottleneck here is.
 
 ## Configuration
 
@@ -114,7 +117,7 @@ This is currently not used
 
 This is currently not used
 
-## List of tasks
+## List of tasks [ed: may be obsolete]
 
 Tasks are run by using [pyinvoke](http://pyinvoke.org/) and are defined inside
 of `tasks.py`.
