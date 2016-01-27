@@ -34,7 +34,7 @@ def _local_walker(recursive=True):
                     yield os.path.join(root, filename)
         else:
             for path in os.listdir(directory):
-                yield os.path.join(directory, filename)
+                yield os.path.join(directory, path)
     return _walk_local_directory
 
 
@@ -96,9 +96,17 @@ def list_report_files(directory, aws_access_key_id=None,
 def get_imported_dates(directory, aws_access_key_id=None,
                        aws_secret_access_key=None):
 
-    walker = _s3_walker(aws_access_key_id=aws_access_key_id,
-                        aws_secret_access_key=aws_secret_access_key,
-                        recursive=False)
+    if directory.startswith("s3n://"):
+        walker = _s3_walker(aws_access_key_id=aws_access_key_id,
+                            aws_secret_access_key=aws_secret_access_key,
+                            recursive=False)
+    elif directory.startswith("ssh://"):
+        walker = _ssh_walker(directory, key_file=key_file,
+                             no_host_key_check=no_host_key_check,
+                             recursive=False)
+    else:
+        walker = _local_walker(recursive=False)
+
     dates = []
     for listing in walker(directory):
         if listing.endswith(".json"):
@@ -125,26 +133,18 @@ def get_luigi_target(path, ssh_key_file=None, no_host_key_check=False):
                             no_host_key_check=no_host_key_check)
     return LocalTarget(path, format=file_format)
 
-def setup_pipeline_logging(config, conf_file="logging.cfg"):
-    if os.path.exists(conf_file):
-        logging.config.fileConfig(conf_file, disable_existing_loggers=True)
-    else:
-        log_level = getattr(logging, config.logging.level)
-        logger = logging.getLogger('ooni-pipeline')
-        logger.setLevel(log_level)
+def setup_pipeline_logging(config):
+    log_level = getattr(logging, config.logging.level)
+    logger = logging.getLogger('ooni-pipeline')
+    logger.setLevel(log_level)
 
-        file_handler = logging.FileHandler(config.logging.filename)
-        file_handler.setLevel(log_level)
+    file_handler = logging.FileHandler(config.logging.filename)
+    file_handler.setLevel(log_level)
 
-        stream_handler = logging.StreamHandler()
-        stream_handler.setLevel(log_level)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
 
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        file_handler.setFormatter(formatter)
-        stream_handler.setFormatter(formatter)
-
-        logger.addHandler(file_handler)
-        logger.addHandler(stream_handler)
+    logger.addHandler(file_handler)
     return logging.getLogger('ooni-pipeline')
 
 class Timer(object):

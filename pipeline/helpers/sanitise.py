@@ -3,6 +3,17 @@ from __future__ import absolute_import, print_function, unicode_literals
 import re
 import hashlib
 
+def fix_body(body):
+    if body is None:
+        return None
+    return body.strip("\0")
+
+def fix_headers(headers):
+    fixed_headers = {}
+    for name, values in headers:
+        for v in values:
+            fixed_headers[name] = v
+    return fixed_headers
 
 class Sanitisers(object):
     def __init__(self, bridge_db):
@@ -12,18 +23,74 @@ class Sanitisers(object):
         return entry
 
     def http_requests(self, entry):
+        entry['test_name'] = 'http_requests'
+        experiment_requests = []
+        control_requests = []
+
+        for request in entry['requests']:
+            if request.get('response') is not None:
+                request['response']['body'] = fix_body(request['response']['body'])
+                request['response']['headers'] = fix_headers(request['response']['headers'])
+            else:
+                request['response'] = {'body': None, 'headers': {}}
+            request['request']['url'] = fix_body(request['request']['url'])
+            if request['request']['url'].startswith('shttp') or \
+                    request['request'].get('tor') == True or \
+                    (request['request'].get('tor') not in [None, False]
+                        and request['request']['tor'].get('is_tor') == True):
+                request['request']['tor'] = {'is_tor': True}
+            elif request['request'].get('tor') in [False, None, {'is_tor': False}]:
+                request['request']['tor'] = {'is_tor': False}
+            else:
+                print("Unable to detect if the request was done over tor or not")
+                print(request)
+                request['request']['tor'] = {'is_tor': False}
+            for k, v in request['response']['headers'].items():
+                if k.lower() == 'content-length':
+                    request['response_length'] = v
+            if request['request']['tor']['is_tor'] == True:
+                control_requests.append(request)
+            else:
+                experiment_requests.append(request)
+        entry['requests'] = []
+        try:
+            entry['requests'].append(experiment_requests.pop(0))
+        except IndexError:
+            pass
+        try:
+            entry['requests'].append(control_requests.pop(0))
+        except IndexError:
+            pass
+        entry['requests'] += experiment_requests
+        entry['requests'] += control_requests
         return entry
 
     def scapy_template(self, entry):
+        for packets_type in ['answered_packets', 'sent_packets']:
+            if packets_type in entry:
+                for packet_entry in entry['answered_packets']:
+                    try:
+                        packet_entry[0]['raw_packet'] = \
+                            packet_entry[0]['raw_packet'].encode('hex')
+                    except IndexError:
+                        continue
         return entry
 
     def dns_template(self, entry):
         return entry
 
     def dns_consistency(self, entry):
+        entry['test_name'] = 'dns_consistency'
+        tampered_resolvers = []
+        for k, v in entry['tampering'].items():
+            if v == True:
+                tampered_resolvers.append(k)
+        entry['tampered_resolvers'] = tampered_resolvers
+        entry['tampering_detected'] = len(tampered_resolvers) > 0
         return entry
 
     def captive_portal(self, entry):
+        entry['test_name'] = 'captive_portal'
         return entry
 
     def null(self, entry):
@@ -40,6 +107,7 @@ class Sanitisers(object):
         return entry
 
     def bridge_reachability(self, entry):
+        entry['test_name'] = 'bridge_reachability'
         if not entry.get('bridge_address'):
             entry['bridge_address'] = entry['input']
 
@@ -70,6 +138,19 @@ class Sanitisers(object):
 
     def tcp_connect(self, entry):
         entry = self.bridge_reachability_tcp_connect(entry)
+        entry['test_name'] = 'tcp_connect'
+        return entry
+
+    def http_header_field_manipulation(self, entry):
+        entry['test_name'] = 'http_header_field_manipulation'
+        return entry
+
+    def http_invalid_request_line(self, entry):
+        entry['test_name'] = 'http_invalid_request_line'
+        return entry
+
+    def http_host(self, entry):
+        entry['test_name'] = 'http_host'
         return entry
 
     def default(self, entry):
@@ -78,8 +159,8 @@ class Sanitisers(object):
 
 def get_sanitisers(test_name):
     sanitise_mapping = {
-        "http_host": "http_template",
-        "HTTP Host": "http_template",
+        "http_host": ["http_template", "http_host"],
+        "HTTP Host": ["http_template", "http_host"],
 
         "http_requests_test": ["http_template",
                                "http_requests"],
@@ -96,11 +177,11 @@ def get_sanitisers(test_name):
         "DNS tamper": ["dns_template", "dns_consistency"],
         "dns_consistency": ["dns_template", "dns_consistency"],
 
-        "HTTP Invalid Request Line": "null",
-        "http_invalid_request_line": "null",
+        "HTTP Invalid Request Line": ["http_invalid_request_line"],
+        "http_invalid_request_line": ["http_invalid_request_line"],
 
-        "http_header_field_manipulation": "null",
-        "HTTP Header Field Manipulation": "null",
+        "http_header_field_manipulation": ["http_header_field_manipulation"],
+        "HTTP Header Field Manipulation": ["http_header_field_manipulation"],
 
         "Multi Protocol Traceroute Test": ["scapy_template"],
         "multi_protocol_traceroute_test": ["scapy_template"],

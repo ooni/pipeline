@@ -5,6 +5,7 @@ import json
 import traceback
 import sys
 import os
+#from functools import wraps
 
 from invoke.config import Config
 from invoke import Collection, ctask as task
@@ -16,6 +17,16 @@ logger = setup_pipeline_logging(config)
 
 os.environ["PYTHONPATH"] = os.environ.get("PYTHONPATH") if os.environ.get("PYTHONPATH") else ""
 os.environ["PYTHONPATH"] = ":".join(os.environ["PYTHONPATH"].split(":") + [config.core.ooni_pipeline_path])
+
+#def with_timer(func_to_wrap):
+#    @wraps(func_to_wrap)
+#    def func_wrapper(*args, **kwargs):
+#        logger.info("Starting task %s" % self.__name__)
+#        timer = Timer()
+#        timer.start()
+#        func_to_wrap(*args, **kwargs)
+#        logger.info("Finished task at %s" % timer.stop())
+#    return func_wrapper
 
 def _create_cfg_files():
     with open("client.cfg", "w") as fw:
@@ -41,90 +52,10 @@ master: {spark_master}
            kafka_hosts=config.kafka.hosts,
            spark_master=config.spark.master,
            spark_submit=config.spark.spark_submit))
-    with open("logging.cfg", "w") as fw:
-        fw.write("""[loggers]
-keys=root,ooni-pipeline,luigi-interface
-
-[handlers]
-keys=stream_handler,file_handler
-
-[formatters]
-keys=formatter
-
-[logger_root]
-level={loglevel}
-handlers=
-
-[logger_luigi-interface]
-level=WARNING
-handlers=stream_handler,file_handler
-qualname=luigi-interface
-
-[logger_ooni-pipeline]
-level={loglevel}
-handlers=stream_handler,file_handler
-qualname=ooni-pipeline
-
-[handler_stream_handler]
-class=StreamHandler
-level={loglevel}
-formatter=formatter
-args=(sys.stdout,)
-
-[handler_file_handler]
-class=FileHandler
-level={loglevel}
-formatter=formatter
-args=('{logfile}',)
-
-[formatter_formatter]
-""".format(loglevel=config.logging.level, logfile=config.logging.filename))
-        fw.write("format=%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        fw.write("\n")
 
 _create_cfg_files()
 
 @task
-def setup_remote_syslog(ctx):
-    if not os.path.exists("/usr/local/bin/remote_syslog"):
-        if sys.platform.startswith("darwin"):
-            filename = "remote_syslog_darwin_amd64.tar.gz"
-        elif sys.platform.startswith("linux"):
-            filename = "remote_syslog_linux_amd64.tar.gz"
-        else:
-            logger.error("This platform does not support remote_syslog")
-            return
-        ctx.run("cd /tmp/")
-        ctx.run("wget -O /tmp/{filename}"
-                " https://github.com/papertrail/remote_syslog2/releases/download/v0.13/{filename}".format(
-            filename=filename))
-        ctx.run("tar xvzf /tmp/{filename} -C /tmp/".format(filename=filename))
-        ctx.run("cp /tmp/remote_syslog/remote_syslog /usr/local/bin/remote_syslog")
-    pid_file = "remote_syslog.pid"
-    try:
-        with open(pid_file) as f:
-            pid = f.read().strip()
-        pid = int(pid)
-        os.kill(pid, 0)
-    except (OSError, IOError):
-        command = ("/usr/local/bin/remote_syslog"
-                   " -d {papertrail_hostname}"
-                   " -p {papertrail_port}"
-                   " --pid-file={pid_file}"
-                   " ooni-pipeline.log".format(
-                       papertrail_hostname=config.papertrail.hostname,
-                       papertrail_port=config.papertrail.port,
-                       pid_file=pid_file
-                   ))
-        logger.info("Running %s" % command)
-        ctx.run(command, pty=True)
-
-@task
-def realtime(ctx):
-    print("Starting realtime stream processing")
-
-
-@task(setup_remote_syslog)
 def generate_streams(ctx, date_interval,
                      src="s3n://ooni-private/reports-raw/yaml/",
                      workers=16,
@@ -153,26 +84,16 @@ def generate_streams(ctx, date_interval,
             ctx.run("sudo halt")
 
 
-@task(setup_remote_syslog)
-def upload_reports(ctx, src, dst="s3n://ooni-private/reports-raw/yaml/",
-                   workers=16, limit=None, move=False, halt=False):
-    try:
-        timer = Timer()
-        timer.start()
-        if limit is not None:
-            limit = int(limit)
-        from pipeline.batch import upload_reports
-        uploaded_reports = upload_reports.run(src_directory=src, dst=dst,
-                                              worker_processes=workers,
-                                              limit=limit, move=move)
-        logger.info("upload_reports runtime: %s" % timer.stop())
-    finally:
-        if halt:
-            ctx.run("sudo halt")
-    return uploaded_reports
+@task
+def move_and_bin_reports(ctx, src, dst="s3n://ooni-private/reports-raw/yaml/"):
+    timer = Timer()
+    timer.start()
+    from pipeline.batch import move_and_bin_reports
+    move_and_bin_reports.run(src_directory=src, dst=dst)
+    logger.info("move_and_bin_reports runtime: %s" % timer.stop())
 
 
-@task(setup_remote_syslog)
+@task
 def list_reports(ctx, path="s3n://ooni-private/reports-raw/yaml/"):
     timer = Timer()
     timer.start()
@@ -184,100 +105,55 @@ def list_reports(ctx, path="s3n://ooni-private/reports-raw/yaml/"):
     logger.info("list_reports runtime: %s" % timer.stop())
 
 
-@task(setup_remote_syslog)
+@task
 def clean_streams(ctx, dst_private="s3n://ooni-private/",
                   dst_public="s3n://ooni-public/"):
     from pipeline.helpers.util import get_luigi_target
     paths_to_delete = (
         os.path.join(dst_private, "reports-raw", "streams"),
         os.path.join(dst_public, "reports-sanitised", "yaml"),
-        os.path.join(dst_public, "reports-sanitised", "streams")
+        os.path.join(dst_public, "reports-sanitised", "streams"),
+        os.path.join(dst_public, "json")
     )
     for path in paths_to_delete:
         target = get_luigi_target(path)
         logger.info("deleting %s" % path)
         target.remove()
 
-@task(setup_remote_syslog)
-def add_headers_to_db(ctx, date_interval=None, workers=16,
+@task
+def add_headers_to_db(ctx, date_interval, workers=16,
                       src="s3n://ooni-private/reports-raw/yaml/",
                       dst_private="s3n://ooni-private/",
-                      dst_public="s3n://ooni-public/", halt=False):
-    try:
-        timer = Timer()
-        timer.start()
-        from pipeline.batch import add_headers_to_db
-        uploaded_dates = upload_reports(ctx, src="s3n://ooni-incoming/", workers=workers, move=True)
-        if not date_interval:
-            for uploaded_date in uploaded_dates:
-                logger.info("Running add_headers_to_db for date %s" % uploaded_date)
-                add_headers_to_db.run(src=src, date_interval=uploaded_date,
-                                    worker_processes=workers, dst_private=dst_private,
-                                    dst_public=dst_public)
-        else:
-            logger.info("Running add_headers_to_db for date %s" % date_interval)
-            add_headers_to_db.run(src=src, date_interval=date_interval,
-                                worker_processes=workers, dst_private=dst_private,
-                                dst_public=dst_public)
-        logger.info("add_headers_to_db runtime: %s" % timer.stop())
-    finally:
-        if halt:
-            ctx.run("sudo halt")
-
-
-@task(setup_remote_syslog)
-def sync_reports(ctx,
-                 srcs="ssh://root@bouncer.infra.ooni.nu/data/bouncer/archive",
-                 dst_private="s3n://ooni-incoming/", workers=16, halt=False):
-    try:
-        timer = Timer()
-        timer.start()
-        from pipeline.batch import sync_reports
-        date = datetime.now().strftime("%Y-%m-%d")
-        srcs = srcs.split(",")
-        report_files = sync_reports.run(srcs=srcs,
-                                        worker_processes=workers,
-                                        dst_private=dst_private)
-        logger.info("Uploaded the following reports:")
-        for report_file in report_files:
-            logger.info("* %s" % report_file)
-        start_computer(ctx, instance_type="m3.xlarge",
-                       invoke_command="add_headers_to_db --workers=4 --halt".format(date=date))
-        logger.info("sync_reports runtime: %s" % timer.stop())
-    finally:
-        if halt:
-            ctx.run("sudo halt")
-
-
-@task(setup_remote_syslog)
-def start_computer(ctx, private_key="private/ooni-pipeline.pem",
-                   instance_type="c3.8xlarge",
-                   invoke_command="add_headers_to_db --workers=32 --halt"):
+                      dst_public="s3n://ooni-public/"):
     timer = Timer()
     timer.start()
-    logger.info("Starting a %s AWS instance"
-                " and running on it the command %s" % (instance_type, invoke_command))
+    from pipeline.batch import add_headers_to_db
+    logger.info("Running add_headers_to_db for date %s" % date_interval)
+    add_headers_to_db.run(src=src, date_interval=date_interval,
+                        worker_processes=workers, dst_private=dst_private,
+                        dst_public=dst_public)
+    logger.info("add_headers_to_db runtime: %s" % timer.stop())
 
-    os.environ["ANSIBLE_HOST_KEY_CHECKING"] = "false"
-    os.environ["AWS_ACCESS_KEY_ID"] = config.aws.access_key_id
-    os.environ["AWS_SECRET_ACCESS_KEY"] = config.aws.secret_access_key
-    try:
-        command = ("ansible-playbook --private-key {private_key}"
-                   " -i inventory playbook.yaml"
-                   " --extra-vars=".format(private_key=private_key))
-        command += "'%s'" % json.dumps({
-            "instance_type": instance_type,
-            "invoke_command": invoke_command
-        })
-        result = ctx.run(command, pty=True)
-        logger.info(str(result))
-    except Exception:
-        logger.error("Failed to run ansible playbook")
-        logger.error(traceback.format_exc())
-    logger.info("start_computer runtime: %s" % timer.stop())
+@task
+def streams_to_db(ctx, streams_dir, date_interval):
+    timer = Timer()
+    timer.start()
+    from pipeline.batch import streams_to_db
+    streams_to_db.run(streams_dir=streams_dir, date_interval=date_interval)
+    print("streams_to_db runtime: %s" % timer.stop())
 
+@task
+def bins_to_sanitised_streams(ctx, date_interval,
+                              unsanitised_dir="s3n://ooni-private/reports-raw/",
+                              sanitised_dir="s3n://ooni-public/",
+                              workers=36):
+    from pipeline.batch import bins_to_sanitised_streams
+    bins_to_sanitised_streams.run(unsanitised_dir=unsanitised_dir,
+                                  sanitised_dir=sanitised_dir,
+                                  date_interval=date_interval,
+                                  workers=workers)
 
-@task(setup_remote_syslog)
+@task
 def spark_submit(ctx, script,
                  spark_submit="/home/hadoop/spark/bin/spark-submit"):
     timer = Timer()
@@ -289,7 +165,7 @@ def spark_submit(ctx, script,
     logger.info("spark_submit runtime: %s" % timer.stop())
 
 
-@task(setup_remote_syslog)
+@task
 def spark_apps(ctx, date_interval, src="s3n://ooni-public/reports-sanitised/streams/",
                dst="s3n://ooni-public/processed/", workers=3):
     timer = Timer()
@@ -300,5 +176,5 @@ def spark_apps(ctx, date_interval, src="s3n://ooni-public/reports-sanitised/stre
     logger.info("spark_submit runtime: %s" % timer.stop())
 
 
-ns = Collection(upload_reports, generate_streams, list_reports, clean_streams,
-                add_headers_to_db, start_computer, sync_reports, spark_apps, spark_submit)
+ns = Collection(move_and_bin_reports, generate_streams, list_reports, clean_streams,
+                spark_apps, spark_submit, bins_to_sanitised_streams, streams_to_db)

@@ -5,6 +5,7 @@ import shutil
 import logging
 
 from dateutil.parser import parse as date_parse
+import datetime
 
 import luigi
 import luigi.worker
@@ -34,10 +35,9 @@ class ReportSource(ExternalTask):
         return LocalTarget(self.src, format=file_format)
 
 
-class S3CopyRawReport(luigi.Task):
+class MoveAndBinReport(luigi.Task):
     src = luigi.Parameter()
     dst = luigi.Parameter()
-    move = luigi.Parameter()
 
     def requires(self):
         return ReportSource(self.src)
@@ -72,11 +72,14 @@ class S3CopyRawReport(luigi.Task):
                 df_version="v1",
                 ext=ext.replace(".gz", "").replace(".yamloo", ".yaml")
             )
-            uri = os.path.join(self.dst, date.strftime("%Y-%m-%d"), filename)
-            return S3Target(uri)
+            uri = os.path.join(self.dst, datetime.date.today().isoformat(), filename)
         except Exception:
-            return S3Target(os.path.join(self.dst, "failed",
-                                         os.path.basename(self.src)))
+            uri = os.path.join(self.dst, "failed", os.path.basename(self.src))
+        finally:
+            if uri.startswith("s3n://"):
+                return S3Target(uri)
+            else:
+                return LocalTarget(uri)
 
     def run(self):
         input = self.input()
@@ -84,32 +87,17 @@ class S3CopyRawReport(luigi.Task):
         with output.open('w') as out_file:
             with input.open('r') as in_file:
                 shutil.copyfileobj(in_file, out_file)
-        if self.move:
-            input.remove()
+        input.remove()
 
 
-def run(src_directory, dst, worker_processes, limit=None, move=False):
+def run(src_directory, dst):
     sch = luigi.scheduler.CentralPlannerScheduler()
-    idx = 0
-    w = luigi.worker.Worker(scheduler=sch,
-                            worker_processes=worker_processes)
+    w = luigi.worker.Worker(scheduler=sch)
 
-    uploaded_files = []
     for filename in list_report_files(
-        src_directory, aws_access_key_id=config.aws.access_key_id,
+            src_directory, aws_access_key_id=config.aws.access_key_id,
             aws_secret_access_key=config.aws.secret_access_key):
-        if limit is not None and idx >= limit:
-            break
-        idx += 1
-        logging.info("uploading %s" % filename)
-        task = S3CopyRawReport(src=filename, dst=dst, move=move)
-        uploaded_files.append(task.output().path)
+        logging.info("moving %s to %s" % (filename, dst))
+        task = MoveAndBinReport(src=filename, dst=dst)
         w.add(task, multiprocess=True)
     w.run()
-    w.stop()
-    uploaded_dates = []
-    for uploaded_file in uploaded_files:
-        uploaded_date = os.path.basename(os.path.dirname(uploaded_file))
-        if uploaded_date not in uploaded_dates:
-            uploaded_dates.append(uploaded_date)
-    return uploaded_dates
