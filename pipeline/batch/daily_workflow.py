@@ -771,7 +771,8 @@ class InsertMeasurementsIntoPostgres(luigi.postgres.CopyToTable):
         ('software_name', 'TEXT'),
         ('software_version', 'TEXT'),
         ('test_version', 'TEXT'),
-        ('bucket_date', 'DATE')
+        ('bucket_date', 'DATE'),
+        ('anomaly', 'BOOL')
     ]
 
     def requires(self):
@@ -780,6 +781,7 @@ class InsertMeasurementsIntoPostgres(luigi.postgres.CopyToTable):
     def _format_record(self, line, idx):
         try:
             record = json_loads(line)
+            record['anomaly'] = False
         except Exception:
             logger.error("%s:%s error in parsing JSON" % (self.report_path, idx))
             logger.error(traceback.format_exc())
