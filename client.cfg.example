@@ -6,6 +6,8 @@ raw-reports-dir: /data/ooni/private/raw-reports/yaml/
 private-dir: /data/ooni/private/
 public-dir: /data/ooni/public/
 bridge-db-path: /data/ooni/private/bridge_reachability/bridge_db.json
+censorship-methods-path: /data/ooni/public/censorship-methods.csv
+country-censorship-methods-path: /data/ooni/public/country-censorship-methods.csv
 [postgres]
 local-tmp-dir: /tmp
 host: 127.0.0.1
