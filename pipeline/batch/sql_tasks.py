@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 
+import string
+import random
+
 import luigi
 from luigi.postgres import PostgresTarget
 
@@ -180,9 +183,12 @@ class RunQuery(luigi.Task):
     user = config.get("postgres", "user")
     password = config.get("postgres", "password")
 
+    def complete(self):
+        return False
+
     @property
     def update_id(self):
-        return self.task_id
+        return ''.join(random.choice(string.ascii_uppercase) for _ in range(20))
 
     def run(self):
         connection = self.output().connect()
@@ -208,36 +214,24 @@ class RunQuery(luigi.Task):
 
 class CreateBlockpageCountView(RunQuery):
     table = 'metrics-materialised-views'
-    def complete(self):
-        return False
-
     def query(self):
         metrics_table = config.get("postgres", "metrics-table")
         return blockpage_count(metrics_table)
 
 class CreateBlockpageUrlsView(RunQuery):
     table = 'metrics-materialised-views'
-    def complete(self):
-        return False
-
     def query(self):
         metrics_table = config.get("postgres", "metrics-table")
         return blockpage_urls(metrics_table)
 
 class CreateIdentifiedVendorsView(RunQuery):
     table = 'metrics-materialised-views'
-    def complete(self):
-        return False
-
     def query(self):
         metrics_table = config.get("postgres", "metrics-table")
         return identified_vendors(metrics_table)
 
 class CreateCountryCountsView(RunQuery):
     table = 'metrics-materialised-views'
-    def complete(self):
-        return False
-
     def query(self):
         metrics_table = config.get("postgres", "metrics-table")
         return country_counts(metrics_table)
