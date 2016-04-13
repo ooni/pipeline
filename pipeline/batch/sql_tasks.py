@@ -208,24 +208,36 @@ class RunQuery(luigi.Task):
 
 class CreateBlockpageCountView(RunQuery):
     table = 'metrics-materialised-views'
+    def complete(self):
+        return False
+
     def query(self):
         metrics_table = config.get("postgres", "metrics-table")
         return blockpage_count(metrics_table)
 
 class CreateBlockpageUrlsView(RunQuery):
     table = 'metrics-materialised-views'
+    def complete(self):
+        return False
+
     def query(self):
         metrics_table = config.get("postgres", "metrics-table")
         return blockpage_urls(metrics_table)
 
 class CreateIdentifiedVendorsView(RunQuery):
     table = 'metrics-materialised-views'
+    def complete(self):
+        return False
+
     def query(self):
         metrics_table = config.get("postgres", "metrics-table")
         return identified_vendors(metrics_table)
 
 class CreateCountryCountsView(RunQuery):
     table = 'metrics-materialised-views'
+    def complete(self):
+        return False
+
     def query(self):
         metrics_table = config.get("postgres", "metrics-table")
         return country_counts(metrics_table)
