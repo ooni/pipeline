@@ -9,12 +9,16 @@ config = luigi.configuration.get_config()
 # These are the countries for which we identify blocking by looking for certain
 # fingerprint in the HTTP response body.
 blockpage_body_fingerprints = {
-    'IR': '%iframe src="http://10.10%',
-    'TR': '%uyarınca yapılan teknik inceleme ve hukuki değerlendirme sonucunda bu internet%',
-    'GR': '%www.gamingcommission.gov.gr/index.php/forbidden-access-black-list/%',
-    'RU': '%http://eais.rkn.gov.ru/%',
-    'IN': '%The page you have requested has been blocked%',
-    'BE': '%that is considered illegal according to Belgian legislation%'
+    'IR': ['%iframe src="http://10.10%'],
+    'TR': ['%uyarınca yapılan teknik inceleme ve hukuki değerlendirme sonucunda bu internet%'],
+    'GR': ['%www.gamingcommission.gov.gr/index.php/forbidden-access-black-list/%'],
+    'RU': ['%http://eais.rkn.gov.ru/%'],
+    'IN': [
+        '%The page you have requested has been blocked%',
+        '%we are complying with court order to prevent access to this site to protect against copyright infrinigement%'
+    ],
+    'BE': ['%that is considered illegal according to Belgian legislation%'],
+    'CY': ['%The access on this website is forbidden%']
 }
 
 # These are countries for which we detect blocking by looking for certain
