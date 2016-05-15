@@ -24,26 +24,30 @@ blockpage_body_fingerprints = {
 # These are countries for which we detect blocking by looking for certain
 # header values.
 blockpage_header_fingerprints = {
-    'SA': ('Server', 'Protected by WireFilter%'),
-    'ID': ('Location', 'http://internet-positif.org%'),
-    'SD': ('Location', 'http://196.1.211.6:8080/alert/'),
-    'QA': ('Location', 'http://www.vodafone.qa/alu.cfm'),
-    'KR': ('Location', 'http://www.warning.or.kr')
+    'SA': [('Server', 'Protected by WireFilter%')],
+    'ID': [('Location', 'http://internet-positif.org%')],
+    'SD': [('Location', 'http://196.1.211.6:8080/alert/')],
+    'QA': [('Location', 'http://www.vodafone.qa/alu.cfm')],
+    'KR': [('Location', 'http://www.warning.or.kr')]
 }
 
 # These are countries for which blocking is identified by checking if the
 # experiment measurement has failed while the control succeeds.
 blockpage_failures = ('CN',)
 
-where_body_template = """{metrics_table}.test_keys ->> 'body_length_match' = 'false'
+where_body_template = """(
+    {metrics_table}.test_keys ->> 'body_length_match' = 'false'
     AND ({metrics_table}.test_keys -> 'requests' -> 0 -> 'response' ->> 'body'
             LIKE '{body_filter}' OR
         {metrics_table}.test_keys -> 'requests' -> 1 -> 'response' ->> 'body'
             LIKE '{body_filter}')
+    )
 """
 
-where_header_template = """{metrics_table}.test_keys -> 'requests' -> 0 -> 'response'
+where_header_template = """(
+    {metrics_table}.test_keys -> 'requests' -> 0 -> 'response'
     -> 'headers' ->> '{header_name}' LIKE '{header_value}'
+)
 """
 
 where_failure_template = """test_keys->'experiment_failure'!='null'
@@ -94,18 +98,23 @@ def select_block_urls(probe_cc, where, metrics_table):
 def create_blockpage_view(query_function, view_name, metrics_table):
     select_queries = []
 
-    for probe_cc, body_filter in blockpage_body_fingerprints.items():
-        where = where_body_template.format(body_filter=body_filter,
+    for probe_cc, body_filters in blockpage_body_fingerprints.items():
+        where = ' OR '.join([
+                where_body_template.format(body_filter=body_filter,
                                            metrics_table=metrics_table)
+                for body_filter in body_filters
+        ])
         select_queries.append(query_function(probe_cc=probe_cc,
                                              where=where,
                                              metrics_table=metrics_table))
 
     for probe_cc, headers in blockpage_header_fingerprints.items():
-        header_name, header_value = headers
-        where = where_header_template.format(header_name=header_name,
+        where = ' OR '.join([
+                where_header_template.format(header_name=header_name,
                                              header_value=header_value,
                                              metrics_table=metrics_table)
+                for header_name, header_value in headers
+        ])
         select_queries.append(query_function(probe_cc=probe_cc,
                                              where=where,
                                              metrics_table=metrics_table))
