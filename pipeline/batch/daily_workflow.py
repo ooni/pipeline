@@ -197,6 +197,10 @@ def normalise_str(body):
             body = binary_to_base64_dict(body)
     return body
 
+def file_is_compressible(filename):
+    """Returns true for file types that benefit from compression."""
+    return filename.endswith('.json') or \
+           filename.endswith('.yaml')
 
 def get_luigi_target(path):
     try:
@@ -211,9 +215,14 @@ def get_luigi_target(path):
 
     file_format = None
     if path.endswith(".gz"):
-        file_format = GzipFormat()
+        file_format = GzipFormat(compression_level=9)
     if path.startswith("s3n://"):
-        return S3Target(path, format=file_format)
+        # Try to always store files in S3 in compressed format.
+        s3_headers = {}
+        if file_is_compressible(path):
+            file_format = GzipFormat(compression_level=9)
+            s3_headers["Content-Encoding"] = "gzip"
+        return S3Target(path, format=file_format, headers=s3_headers)
     elif path.startswith("ssh://"):
         ssh_key_file = config.get("ssh", "ssh-key-file", None)
         no_host_key_check = config.get("ssh", "no-host-key-check", None)
