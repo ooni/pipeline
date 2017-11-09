@@ -224,6 +224,23 @@ UNION
                 LIKE '%Privoxy%'
             OR {metrics_table}.test_keys -> 'received' ->> 3
                 LIKE '%Privoxy%')
+UNION
+ SELECT {metrics_table}.test_start_time,
+    {metrics_table}.probe_cc,
+    {metrics_table}.probe_asn,
+    {metrics_table}.report_id,
+    'watchguard' AS vendor
+   FROM {metrics_table}
+  WHERE {metrics_table}.test_name = 'http_invalid_request_line'
+        AND {metrics_table}.test_keys -> 'tampering' = 'true'
+        AND ({metrics_table}.test_keys -> 'received' ->> 0
+                LIKE '%WatchGuard%'::text
+            OR {metrics_table}.test_keys -> 'received' ->> 1
+                LIKE '%WatchGuard%'
+            OR {metrics_table}.test_keys -> 'received' ->> 2
+                LIKE '%WatchGuard%'
+            OR {metrics_table}.test_keys -> 'received' ->> 3
+                LIKE '%WatchGuard%')
 
 ;
 """.format(metrics_table=metrics_table)
