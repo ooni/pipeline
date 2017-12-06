@@ -29,8 +29,11 @@ def init_category_codes(working_dir, postgres):
     with pgconn, pgconn.cursor() as c:
         csv_path = os.path.join(working_dir, 'test-lists', 'lists', '00-LEGEND-new_category_codes.csv')
         for row in _iterate_csv(csv_path, skip_header=True):
-            cat_desc, cat_code, cat_old_codes, cat_long_desc = row
-            cat_old_codes = cat_old_codes.split(' ')
+            cat_desc, cat_code, cat_old_codes_str, cat_long_desc = row
+            cat_old_codes = list(
+                filter(lambda x: x.strip() != '' and x != 'N/A',
+                        cat_old_codes_str.split(' '))
+            )
             c.execute('INSERT INTO url_category (cat_code, cat_desc, cat_long_desc, cat_old_codes)'
                       ' VALUES (%s, %s, %s, %s)'
                       ' ON CONFLICT DO NOTHING RETURNING cat_code',
