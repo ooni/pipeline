@@ -2,9 +2,9 @@ BEGIN;
 
 select _v.register_patch( '006-test-lists', ARRAY[ '005-repeated-report' ], NULL );
 
-CREATE SEQUENCE IF NOT EXISTS cat_no_seq;
+CREATE SEQUENCE cat_no_seq;
 
-CREATE TABLE IF NOT EXISTS url_categories
+CREATE TABLE url_categories
 (
     cat_no INT NOT NULL default nextval('cat_no_seq') PRIMARY KEY,
     cat_code VARCHAR UNIQUE NOT NULL,
@@ -13,9 +13,9 @@ CREATE TABLE IF NOT EXISTS url_categories
     cat_old_codes VARCHAR
 );
 
-CREATE SEQUENCE IF NOT EXISTS url_no_seq;
+CREATE SEQUENCE url_no_seq;
 
-CREATE TABLE IF NOT EXISTS url
+CREATE TABLE url
 (
     url_no INT NOT NULL default nextval('url_no_seq') PRIMARY KEY,
     url VARCHAR,
@@ -28,9 +28,9 @@ CREATE TABLE IF NOT EXISTS url
     UNIQUE (url, country_no)
 );
 
-CREATE SEQUENCE IF NOT EXISTS country_no_seq;
+CREATE SEQUENCE country_no_seq;
 
-CREATE TABLE IF NOT EXISTS country
+CREATE TABLE country
 (
     country_no INT NOT NULL default nextval('country_no_seq') PRIMARY KEY,
     full_name VARCHAR UNIQUE NOT NULL,
