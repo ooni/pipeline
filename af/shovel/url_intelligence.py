@@ -9,6 +9,13 @@ import git
 
 CODE_VER = 1
 
+"""
+$ requirements.txt
+
+$ pip install pycountry psycopg2 GitPython
+
+"""
+
 def _iterate_csv(file_path, skip_header=False):
     with open(file_path, 'r') as csvfile:
         reader = csv.reader(csvfile, delimiter=',')
@@ -38,7 +45,7 @@ special_countries = (
 def get_country_alpha_2_no(postgres):
     pgconn = psycopg2.connect(dsn=postgres)
     with pgconn, pgconn.cursor() as c:
-        c.execute('SELECT alpha_2, country_no FROM countries')
+        c.execute('SELECT alpha_2, country_no FROM country')
         country_alpha_2_no = {str(_[0]): _[1] for _ in c}
     return country_alpha_2_no
 
@@ -59,14 +66,14 @@ def init_countries(postgres):
             # This has the nice side-effect of making some names more compact
             # and "fixing" the "Taiwan, Province of China" issue
             name = country.name.split(',')[0]
-            c.execute('INSERT INTO countries (name, full_name,  alpha_2, alpha_3)'
-                      ' VALUES (%s, %s, %s)'
+            c.execute('INSERT INTO country (name, full_name,  alpha_2, alpha_3)'
+                      ' VALUES (%s, %s, %s, %s)'
                       ' ON CONFLICT DO NOTHING RETURNING country_no',
                       (name, full_name, alpha_2, alpha_3))
 
         for name, alpha_2, alpha_3 in special_countries:
-            c.execute('INSERT INTO countries (name, full_name, alpha_2, alpha_3)'
-                      ' VALUES (%s, %s, %s)'
+            c.execute('INSERT INTO country (name, full_name, alpha_2, alpha_3)'
+                      ' VALUES (%s, %s, %s, %s)'
                       ' ON CONFLICT DO NOTHING RETURNING country_no',
                       (name, full_name, alpha_2, alpha_3))
 
@@ -95,8 +102,8 @@ def init_url_lists(working_dir, postgres, cat_code_no, country_alpha_2_no):
                     print("INVALID country code %s" % alpha_2)
                     continue
                 try:
-                    print("inserting into urls")
-                    c.execute('INSERT INTO urls (url, cat_no, country_no, '
+                    print("inserting into url")
+                    c.execute('INSERT INTO url (url, cat_no, country_no, '
                               ' date_added, source, notes, active)'
                               ' VALUES (%s, %s, %s, %s, %s, %s, %s)'
                               ' ON CONFLICT DO NOTHING RETURNING url_no',
@@ -135,7 +142,7 @@ def update_country_list(changed_path, working_dir, postgres, cat_code_no, countr
         country_no = country_alpha_2_no[alpha_2]
 
         # for each URL in DB, if it's not in the newest CSV, mark it inactive
-        c.execute('SELECT url_no, url FROM urls'
+        c.execute('SELECT url_no, url FROM url '
                   ' WHERE country_no = %s AND active = %s', (country_no, True))
         db_urlno_urls = [_ for _ in c]
         csv_urls = set([row[0] for row in _iterate_csv(csv_path, skip_header=True)]) # XXX check for dupes, etc
@@ -145,7 +152,7 @@ def update_country_list(changed_path, working_dir, postgres, cat_code_no, countr
             if db_urlno_url[1] not in csv_urls:
                 # mark inactive
                 try:
-                    c.execute('UPDATE urls '
+                    c.execute('UPDATE url '
                               'SET active = %s'
                               ' WHERE url_no = %s',
                               (False, db_urlno_url[0]))
@@ -168,12 +175,12 @@ def update_country_list(changed_path, working_dir, postgres, cat_code_no, countr
                 print("INVALID country code %s" % alpha_2)
                 continue
 
-            c.execute('SELECT cat_no, source, notes, url_no, active FROM urls'
+            c.execute('SELECT cat_no, source, notes, url_no, active FROM url'
                       ' WHERE country_no = %s AND url = %s', (country_no, url))
             url_in_db = [_ for _ in c]
             if len(url_in_db) == 0:
                 try:
-                    c.execute('INSERT INTO urls (url, cat_no, country_no, date_added, source, notes, active)'
+                    c.execute('INSERT INTO url (url, cat_no, country_no, date_added, source, notes, active)'
                               ' VALUES (%s, %s, %s, %s, %s, %s, %s)'
                               ' ON CONFLICT DO NOTHING RETURNING url_no',
                               (url, cat_no, country_no, date_added, source, notes, True))
@@ -184,7 +191,7 @@ def update_country_list(changed_path, working_dir, postgres, cat_code_no, countr
                 url_no = url_in_db[0][3]
                 if url_in_db[0][0] != cat_no or url_in_db[0][1] != source or url_in_db[0][2] != notes or url_in_db[0][4] != True:
                     try:
-                        c.execute('UPDATE urls '
+                        c.execute('UPDATE url '
                                   'SET cat_no = %s,'
                                   '    source = %s,'
                                   '    notes = %s,'
@@ -261,7 +268,7 @@ def dirname(s):
 def parse_args():
     p = argparse.ArgumentParser(description='test-lists: perform operations related to test-list synchronization')
     p.add_argument('--url-intelligence-root', metavar='DIR', type=dirname, help='what is the working directory for URL intelligence', required=True)
-    p.add_argument('--pipeline-pg', metavar='DSN', help='libpq data source name', required=True)
+    p.add_argument('--pipeline-pg', metavar='DSN', help='libpq data source name')
     p.add_argument('--proteus-pg', metavar='DSN', help='libpq data source name', required=True)
     opt = p.parse_args()
     return opt
@@ -272,16 +279,16 @@ def main():
         raise RuntimeError('Must specify a working_dir')
 
     initialized_path = os.path.join(opt.url_intelligence_root, '.initialized')
-    try:
+    if os.path.exists(initialized_path):
         with open(initialized_path) as in_file:
             CURRENT_VER = int(in_file.read())
-    except (OSError, IOError):
+    else:
         print("Initialising database and git repo")
-        init(opt.working_dir, opt.proteus_pg)
+        init(opt.url_intelligence_root, opt.proteus_pg)
         with open(initialized_path, 'w') as out_file:
             out_file.write(str(CODE_VER))
 
-    update(opt.working_dir, opt.proteus_pg)
+    update(opt.url_intelligence_root, opt.proteus_pg)
 
 if __name__ == "__main__":
     main()
