@@ -30,7 +30,7 @@ def init_category_codes(working_dir, postgres):
         csv_path = os.path.join(working_dir, 'test-lists', 'lists', '00-LEGEND-new_category_codes.csv')
         for row in _iterate_csv(csv_path, skip_header=True):
             cat_desc, cat_code, cat_old_codes, cat_long_desc = row
-            c.execute('INSERT INTO url_categories (cat_code, cat_desc, cat_long_desc, cat_old_codes)'
+            c.execute('INSERT INTO url_category (cat_code, cat_desc, cat_long_desc, cat_old_codes)'
                       ' VALUES (%s, %s, %s, %s)'
                       ' ON CONFLICT DO NOTHING RETURNING cat_code',
                       (cat_code, cat_desc, cat_long_desc, cat_old_codes))
@@ -52,7 +52,7 @@ def get_country_alpha_2_no(postgres):
 def get_cat_code_no(postgres):
     pgconn = psycopg2.connect(dsn=postgres)
     with pgconn, pgconn.cursor() as c:
-        c.execute('SELECT cat_code, cat_no FROM url_categories')
+        c.execute('SELECT cat_code, cat_no FROM url_category')
         cat_code_no = {str(_[0]): _[1] for _ in c}
     return cat_code_no
 
