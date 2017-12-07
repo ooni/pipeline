@@ -1,5 +1,6 @@
 import os
 import csv
+import sys
 import argparse
 from glob import glob
 
@@ -34,7 +35,7 @@ def init_category_codes(working_dir, postgres):
                 filter(lambda x: x.strip() != '' and x != 'N/A',
                         cat_old_codes_str.split(' '))
             )
-            c.execute('INSERT INTO url_category (cat_code, cat_desc, cat_long_desc, cat_old_codes)'
+            c.execute('INSERT INTO url_categories (cat_code, cat_desc, cat_long_desc, cat_old_codes)'
                       ' VALUES (%s, %s, %s, %s)'
                       ' ON CONFLICT DO NOTHING RETURNING cat_code',
                       (cat_code, cat_desc, cat_long_desc, cat_old_codes))
@@ -49,14 +50,14 @@ special_countries = (
 def get_country_alpha_2_no(postgres):
     pgconn = psycopg2.connect(dsn=postgres)
     with pgconn, pgconn.cursor() as c:
-        c.execute('SELECT alpha_2, country_no FROM country')
+        c.execute('SELECT alpha_2, country_no FROM countries')
         country_alpha_2_no = {str(_[0]): _[1] for _ in c}
     return country_alpha_2_no
 
 def get_cat_code_no(postgres):
     pgconn = psycopg2.connect(dsn=postgres)
     with pgconn, pgconn.cursor() as c:
-        c.execute('SELECT cat_code, cat_no FROM url_category')
+        c.execute('SELECT cat_code, cat_no FROM url_categories')
         cat_code_no = {str(_[0]): _[1] for _ in c}
     return cat_code_no
 
@@ -70,16 +71,19 @@ def init_countries(postgres):
             # This has the nice side-effect of making some names more compact
             # and "fixing" the "Taiwan, Province of China" issue
             name = country.name.split(',')[0]
-            c.execute('INSERT INTO country (name, full_name,  alpha_2, alpha_3)'
+            print("adding %s - %s - %s - %s" % (name, full_name, alpha_2, alpha_3))
+            c.execute('INSERT INTO countries (name, full_name,  alpha_2, alpha_3)'
                       ' VALUES (%s, %s, %s, %s)'
-                      ' ON CONFLICT DO NOTHING RETURNING country_no',
+                      ' RETURNING country_no',
                       (name, full_name, alpha_2, alpha_3))
 
         for name, alpha_2, alpha_3 in special_countries:
-            c.execute('INSERT INTO country (name, full_name, alpha_2, alpha_3)'
+            print("adding %s" % name)
+            c.execute('INSERT INTO countries (name, full_name, alpha_2, alpha_3)'
                       ' VALUES (%s, %s, %s, %s)'
-                      ' ON CONFLICT DO NOTHING RETURNING country_no',
-                      (name, full_name, alpha_2, alpha_3))
+                      ' RETURNING country_no',
+                      (name, name, alpha_2, alpha_3))
+
 
 def init_url_lists(working_dir, postgres, cat_code_no, country_alpha_2_no):
     pgconn = psycopg2.connect(dsn=postgres)
@@ -106,8 +110,9 @@ def init_url_lists(working_dir, postgres, cat_code_no, country_alpha_2_no):
                     print("INVALID country code %s" % alpha_2)
                     continue
                 try:
-                    print("inserting into url")
-                    c.execute('INSERT INTO url (url, cat_no, country_no, '
+                    sys.stdout.write('.')
+                    sys.stdout.flush()
+                    c.execute('INSERT INTO urls (url, cat_no, country_no, '
                               ' date_added, source, notes, active)'
                               ' VALUES (%s, %s, %s, %s, %s, %s, %s)'
                               ' ON CONFLICT DO NOTHING RETURNING url_no',
@@ -146,7 +151,7 @@ def update_country_list(changed_path, working_dir, postgres, cat_code_no, countr
         country_no = country_alpha_2_no[alpha_2]
 
         # for each URL in DB, if it's not in the newest CSV, mark it inactive
-        c.execute('SELECT url_no, url FROM url '
+        c.execute('SELECT url_no, url FROM urls '
                   ' WHERE country_no = %s AND active = %s', (country_no, True))
         db_urlno_urls = [_ for _ in c]
         csv_urls = set([row[0] for row in _iterate_csv(csv_path, skip_header=True)]) # XXX check for dupes, etc
@@ -156,7 +161,7 @@ def update_country_list(changed_path, working_dir, postgres, cat_code_no, countr
             if db_urlno_url[1] not in csv_urls:
                 # mark inactive
                 try:
-                    c.execute('UPDATE url '
+                    c.execute('UPDATE urls '
                               'SET active = %s'
                               ' WHERE url_no = %s',
                               (False, db_urlno_url[0]))
@@ -179,12 +184,12 @@ def update_country_list(changed_path, working_dir, postgres, cat_code_no, countr
                 print("INVALID country code %s" % alpha_2)
                 continue
 
-            c.execute('SELECT cat_no, source, notes, url_no, active FROM url'
+            c.execute('SELECT cat_no, source, notes, url_no, active FROM urls'
                       ' WHERE country_no = %s AND url = %s', (country_no, url))
             url_in_db = [_ for _ in c]
             if len(url_in_db) == 0:
                 try:
-                    c.execute('INSERT INTO url (url, cat_no, country_no, date_added, source, notes, active)'
+                    c.execute('INSERT INTO urls (url, cat_no, country_no, date_added, source, notes, active)'
                               ' VALUES (%s, %s, %s, %s, %s, %s, %s)'
                               ' ON CONFLICT DO NOTHING RETURNING url_no',
                               (url, cat_no, country_no, date_added, source, notes, True))
@@ -195,7 +200,7 @@ def update_country_list(changed_path, working_dir, postgres, cat_code_no, countr
                 url_no = url_in_db[0][3]
                 if url_in_db[0][0] != cat_no or url_in_db[0][1] != source or url_in_db[0][2] != notes or url_in_db[0][4] != True:
                     try:
-                        c.execute('UPDATE url '
+                        c.execute('UPDATE urls '
                                   'SET cat_no = %s,'
                                   '    source = %s,'
                                   '    notes = %s,'
@@ -221,8 +226,8 @@ def update(working_dir, postgres):
 
     cat_code_no = get_cat_code_no(postgres)
     country_alpha_2_no = get_country_alpha_2_no(postgres)
-    for diff in diffs:
-        changed_path = diff.b_path
+    diff_paths = list(map(lambda x: x.b_path, diffs))
+    for changed_path in diff_paths:
         if not changed_path.startswith("lists/"):
             continue
         if not changed_path.endswith(".csv"):
