@@ -90,7 +90,7 @@ def init_countries(postgres, table_names):
             full_name = country['full_name']
             name = country['name']
 
-            print("adding %s - %s - %s - %s" % (name, full_name, alpha_2, alpha_3))
+            print("adding %r - %r - %r - %r" % (name, full_name, alpha_2, alpha_3))
             c.execute('INSERT INTO {} (name, full_name,  alpha_2, alpha_3)'
                       ' VALUES (%s, %s, %s, %s)'
                       ' RETURNING country_no'.format(table_names['countries']),
