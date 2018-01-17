@@ -314,6 +314,8 @@ def main():
         raise RuntimeError('Must specify a working_dir')
 
     if opt.clean == True:
+        if os.path.exists(initialized_path):
+            os.remove(initialized_path)
         truncate_tables(opt.proteus_pg, table_names)
 
     initialized_path = os.path.join(opt.url_intelligence_root, '.initialized')
