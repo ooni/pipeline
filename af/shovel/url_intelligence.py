@@ -313,12 +313,12 @@ def main():
     if not os.path.isdir(opt.url_intelligence_root):
         raise RuntimeError('Must specify a working_dir')
 
+    initialized_path = os.path.join(opt.url_intelligence_root, '.initialized')
     if opt.clean == True:
         if os.path.exists(initialized_path):
             os.remove(initialized_path)
         truncate_tables(opt.proteus_pg, table_names)
 
-    initialized_path = os.path.join(opt.url_intelligence_root, '.initialized')
     if os.path.exists(initialized_path):
         with open(initialized_path) as in_file:
             CURRENT_VER = int(in_file.read())
