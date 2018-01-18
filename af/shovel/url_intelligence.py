@@ -3,6 +3,7 @@ import csv
 import sys
 import argparse
 from glob import glob
+from collections import namedtuple
 
 import datapackage
 import psycopg2
@@ -18,6 +19,8 @@ $ pip install datapackage psycopg2 GitPython
 
 """
 
+PGSettings = namedtuple('PGSettings', ['dsn', 'tables'])
+
 def _iterate_csv(file_path, skip_header=False):
     with open(file_path, 'r') as csvfile:
         reader = csv.reader(csvfile, delimiter=',')
@@ -26,8 +29,8 @@ def _iterate_csv(file_path, skip_header=False):
         for row in reader:
             yield row
 
-def init_category_codes(working_dir, postgres, table_names):
-    pgconn = psycopg2.connect(dsn=postgres)
+def init_category_codes(working_dir, pg_settings):
+    pgconn = psycopg2.connect(dsn=pg_settings.dsn)
     with pgconn, pgconn.cursor() as c:
         csv_path = os.path.join(working_dir, 'test-lists', 'lists', '00-LEGEND-new_category_codes.csv')
         for row in _iterate_csv(csv_path, skip_header=True):
@@ -38,7 +41,7 @@ def init_category_codes(working_dir, postgres, table_names):
             )
             c.execute('INSERT INTO {} (cat_code, cat_desc, cat_long_desc, cat_old_codes)'
                       ' VALUES (%s, %s, %s, %s)'
-                      ' ON CONFLICT DO NOTHING RETURNING cat_code'.format(table_names['url_categories']),
+                      ' ON CONFLICT DO NOTHING RETURNING cat_code'.format(pg_settings.tables['url_categories']),
                       (cat_code, cat_desc, cat_long_desc, cat_old_codes))
             # XXX maybe we care to know when there is a dup?
 
@@ -48,17 +51,17 @@ special_countries = (
     ('European Union', 'EU', 'EUE')
 )
 
-def get_country_alpha_2_no(postgres):
-    pgconn = psycopg2.connect(dsn=postgres)
+def get_country_alpha_2_no(pg_settings):
+    pgconn = psycopg2.connect(dsn=pg_settings.dsn)
     with pgconn, pgconn.cursor() as c:
-        c.execute('SELECT alpha_2, country_no FROM countries')
+        c.execute('SELECT alpha_2, country_no FROM {}'.format(pg_settings.tables['countries']))
         country_alpha_2_no = {str(_[0]): _[1] for _ in c}
     return country_alpha_2_no
 
-def get_cat_code_no(postgres):
-    pgconn = psycopg2.connect(dsn=postgres)
+def get_cat_code_no(pg_settings):
+    pgconn = psycopg2.connect(dsn=pg_settings.dsn)
     with pgconn, pgconn.cursor() as c:
-        c.execute('SELECT cat_code, cat_no FROM url_categories')
+        c.execute('SELECT cat_code, cat_no FROM {}'.format(pg_settings.tables['url_categories']))
         cat_code_no = {str(_[0]): _[1] for _ in c}
     return cat_code_no
 
@@ -76,13 +79,13 @@ def list_countries():
             continue
         yield country
 
-def truncate_tables(postgres, table_names):
-    pgconn = psycopg2.connect(dsn=postgres)
+def truncate_tables(pg_settings):
+    pgconn = psycopg2.connect(dsn=pg_settings.dsn)
     with pgconn, pgconn.cursor() as c:
-        c.execute('TRUNCATE {}, {}, {};'.format(table_names['urls'], table_names['url_categories'], table_names['countries']))
+        c.execute('TRUNCATE {}, {}, {};'.format(*pg_settings.tables.values()))
 
-def init_countries(postgres, table_names):
-    pgconn = psycopg2.connect(dsn=postgres)
+def init_countries(pg_settings):
+    pgconn = psycopg2.connect(dsn=pg_settings.dsn)
     with pgconn, pgconn.cursor() as c:
         for country in list_countries():
             alpha_2 = country['alpha_2']
@@ -93,19 +96,22 @@ def init_countries(postgres, table_names):
             print("adding %r - %r - %r - %r" % (name, full_name, alpha_2, alpha_3))
             c.execute('INSERT INTO {} (name, full_name,  alpha_2, alpha_3)'
                       ' VALUES (%s, %s, %s, %s)'
-                      ' RETURNING country_no'.format(table_names['countries']),
+                      ' RETURNING country_no'.format(pg_settings.tables['countries']),
                       (name, full_name, alpha_2, alpha_3))
 
         for name, alpha_2, alpha_3 in special_countries:
             print("adding %s" % name)
             c.execute('INSERT INTO {} (name, full_name, alpha_2, alpha_3)'
                       ' VALUES (%s, %s, %s, %s)'
-                      ' RETURNING country_no'.format(table_names['countries']),
+                      ' RETURNING country_no'.format(pg_settings.tables['countries']),
                       (name, name, alpha_2, alpha_3))
 
 
-def init_url_lists(working_dir, postgres, cat_code_no, country_alpha_2_no, table_names):
-    pgconn = psycopg2.connect(dsn=postgres)
+def init_url_lists(working_dir, pg_settings):
+    cat_code_no = get_cat_code_no(pg_settings)
+    country_alpha_2_no = get_country_alpha_2_no(pg_settings)
+
+    pgconn = psycopg2.connect(dsn=pg_settings.dsn)
     with pgconn, pgconn.cursor() as c:
         csv_glob = os.path.join(working_dir, 'test-lists', 'lists', '*.csv')
         for csv_path in glob(csv_glob):
@@ -134,7 +140,7 @@ def init_url_lists(working_dir, postgres, cat_code_no, country_alpha_2_no, table
                     c.execute('INSERT INTO {} (url, cat_no, country_no, '
                               ' date_added, source, notes, active)'
                               ' VALUES (%s, %s, %s, %s, %s, %s, %s)'
-                              ' ON CONFLICT DO NOTHING RETURNING url_no'.format(table_names['urls']),
+                              ' ON CONFLICT DO NOTHING RETURNING url_no'.format(pg_settings.tables['urls']),
                               (url, cat_no, country_no, date_added, source, notes, True))
                 except:
                     print("INVALID row in %s: %s" % (csv_path, row))
@@ -155,9 +161,11 @@ def sync_repo(working_dir):
     return diffs
 
 
-def update_country_list(changed_path, working_dir, postgres, cat_code_no, country_alpha_2_no, table_names):
-    pgconn = psycopg2.connect(dsn=postgres)
+def update_country_list(changed_path, working_dir, pg_settings):
+    cat_code_no = get_cat_code_no(pg_settings)
+    country_alpha_2_no = get_country_alpha_2_no(pg_settings)
 
+    pgconn = psycopg2.connect(dsn=pg_settings.dsn)
     with pgconn, pgconn.cursor() as c:
         csv_path = os.path.join(working_dir, 'test-lists', changed_path)
         alpha_2 = os.path.basename(changed_path).split('.csv')[0].upper()
@@ -171,7 +179,8 @@ def update_country_list(changed_path, working_dir, postgres, cat_code_no, countr
 
         # for each URL in DB, if it's not in the newest CSV, mark it inactive
         c.execute('SELECT url_no, url FROM {} '
-                  ' WHERE country_no = %s AND active = %s'.format(table_names['urls']), (country_no, True))
+                  ' WHERE country_no = %s AND active = %s'.format(pg_settings.tables['urls']),
+                  (country_no, True))
         db_urlno_urls = [_ for _ in c]
         csv_urls = set([row[0] for row in _iterate_csv(csv_path, skip_header=True)]) # XXX check for dupes, etc
         print("for country %s, have %s active urls in db" % (alpha_2, len(db_urlno_urls)))
@@ -182,7 +191,7 @@ def update_country_list(changed_path, working_dir, postgres, cat_code_no, countr
                 try:
                     c.execute('UPDATE {} '
                               'SET active = %s'
-                              ' WHERE url_no = %s'.format(table_names['urls']),
+                              ' WHERE url_no = %s'.format(pg_settings.tables['urls']),
                               (False, db_urlno_url[0]))
                 except:
                     print("Failed to mark url_no:%s inactive" % db_urlno_url[0])
@@ -210,7 +219,7 @@ def update_country_list(changed_path, working_dir, postgres, cat_code_no, countr
                 try:
                     c.execute('INSERT INTO {} (url, cat_no, country_no, date_added, source, notes, active)'
                               ' VALUES (%s, %s, %s, %s, %s, %s, %s)'
-                              ' ON CONFLICT DO NOTHING RETURNING url_no'.format(table_names['urls']),
+                              ' ON CONFLICT DO NOTHING RETURNING url_no'.format(pg_settings.tables['urls']),
                               (url, cat_no, country_no, date_added, source, notes, True))
                 except:
                     print("INVALID row in %s: %s" % (csv_path, row))
@@ -224,7 +233,7 @@ def update_country_list(changed_path, working_dir, postgres, cat_code_no, countr
                                   '    source = %s,'
                                   '    notes = %s,'
                                   '    active = %s'
-                                  ' WHERE url_no = %s'.format(table_names['urls']),
+                                  ' WHERE url_no = %s'.format(pg_settings.tables['urls']),
                                   (cat_no, source, notes, True, url_no))
                     except:
                         print("Failed to update %s with values: %s" % (csv_path, row))
@@ -235,7 +244,7 @@ def update_country_list(changed_path, working_dir, postgres, cat_code_no, countr
             else:
                 print("Duplicate entries found in database. Something is wrong see: %s" % url_in_db)
 
-def update(working_dir, postgres, table_names):
+def update(working_dir, pg_settings):
     print("Checking if we need to update")
     diffs = sync_repo(working_dir)
 
@@ -243,8 +252,6 @@ def update(working_dir, postgres, table_names):
         print("no diffs")
         return
 
-    cat_code_no = get_cat_code_no(postgres)
-    country_alpha_2_no = get_country_alpha_2_no(postgres)
     diff_paths = list(map(lambda x: x.b_path, diffs))
     for changed_path in diff_paths:
         if not changed_path.startswith("lists/"):
@@ -252,7 +259,7 @@ def update(working_dir, postgres, table_names):
         if not changed_path.endswith(".csv"):
             continue
         print("Updating test list: %s" % changed_path)
-        update_country_list(changed_path, working_dir, postgres, cat_code_no, country_alpha_2_no, table_names)
+        update_country_list(changed_path, working_dir, pg_settings)
 
 TEST_LISTS_GIT_URL = 'https://github.com/citizenlab/test-lists/'
 
@@ -273,18 +280,17 @@ def init_repo(working_dir):
                                progress=ProgressHandler())
     return repo
 
-def init(working_dir, postgres, table_names):
+def init(working_dir, pg_settings):
     print("Initialising git repo")
     init_repo(working_dir)
     print("Initialising category codes")
-    init_category_codes(working_dir, postgres, table_names)
+    init_category_codes(working_dir, pg_settings)
     print("Initialising countries")
-    init_countries(postgres, table_names)
+    init_countries(pg_settings)
 
     print("Initialising url lists")
-    cat_code_no = get_cat_code_no(postgres)
-    country_alpha_2_no = get_country_alpha_2_no(postgres)
-    init_url_lists(working_dir, postgres, cat_code_no, country_alpha_2_no, table_names)
+
+    init_url_lists(working_dir, pg_settings)
 
 def dirname(s):
     if not os.path.isdir(s):
@@ -302,33 +308,38 @@ def parse_args():
     opt = p.parse_args()
     return opt
 
+# These are defined as key values, so that we can support writing to different
+# table names for the pipeline vs proteus.
+proteus_tables = {
+    'urls': 'urls',
+    'countries': 'countries',
+    'url_categories': 'url_categories'
+}
+
 def main():
-    table_names = {
-        'urls': 'urls',
-        'countries': 'countries',
-        'url_categories': 'url_categories'
-    }
 
     opt = parse_args()
     if not os.path.isdir(opt.url_intelligence_root):
         raise RuntimeError('Must specify a working_dir')
 
+    pg_settings = PGSettings(tables=proteus_tables, dsn=opt.proteus_pg)
+
     initialized_path = os.path.join(opt.url_intelligence_root, '.initialized')
     if opt.clean == True:
         if os.path.exists(initialized_path):
             os.remove(initialized_path)
-        truncate_tables(opt.proteus_pg, table_names)
+        truncate_tables(pg_settings)
 
     if os.path.exists(initialized_path):
         with open(initialized_path) as in_file:
             CURRENT_VER = int(in_file.read())
     else:
         print("Initialising database and git repo")
-        init(opt.url_intelligence_root, opt.proteus_pg, table_names)
+        init(opt.url_intelligence_root, pg_settings)
         with open(initialized_path, 'w') as out_file:
             out_file.write(str(CODE_VER))
 
-    update(opt.url_intelligence_root, opt.proteus_pg, table_names)
+    update(opt.url_intelligence_root, pg_settings)
 
 if __name__ == "__main__":
     main()
