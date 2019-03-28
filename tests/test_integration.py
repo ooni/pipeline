@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import traceback
+import subprocess
 from datetime import datetime, timedelta
 from glob import glob
 
@@ -78,13 +79,34 @@ def fetch_autoclaved_bucket(dst_dir, bucket_date):
                 pass
             resource.meta.client.download_file('ooni-data', fkey, dst_pathname)
 
-def run_centrifugation(client, bucket_date):
+def run_centrifugation(bucket_date):
+    fmt = '%Y-%m-%d'
+    end_bucket_date = (datetime.strptime(bucket_date, fmt) + timedelta(1)).strftime(fmt)
+
+    centrifugation_args = [
+        os.path.join(AF_ROOT, 'shovel', 'centrifugation.py'),
+        '--start',
+        '{}T00:00:00'.format(bucket_date),
+        '--end',
+        '{}T00:00:00'.format(end_bucket_date),
+        '--autoclaved-root',
+        's3://ooni-data/autoclaved/jsonl.tar.lz4/',
+        '--postgres',
+        "host={} user={} port={}".format('localhost', METADB_PG_USER, 25432)
+    ]
+    print("Running command {}".format(centrifugation_args))
+    process = subprocess.Popen(centrifugation_args, stdout=subprocess.PIPE)
+    for line in process.stdout:
+        sys.stdout.write(line)
+    assert process.returncode == 0, "non zero exit code for centrifugation"
+
+def run_centrifugation_docker(client, bucket_date):
     fmt = '%Y-%m-%d'
     end_bucket_date = (datetime.strptime(bucket_date, fmt) + timedelta(1)).strftime(fmt)
 
     centrifugation_cmd = '/mnt/af/shovel/centrifugation.py --start {}T00:00:00'.format(bucket_date)
     centrifugation_cmd += ' --end {}T00:00:00'.format(end_bucket_date)
-    centrifugation_cmd += " --autoclaved-root /mnt/testdata --postgres 'host={} user={}'".format(METADB_NAME, METADB_PG_USER)
+    centrifugation_cmd += " --autoclaved-root s3://ooni-data/autoclaved/jsonl.tar.lz4/ --postgres 'host={} user={}'".format(METADB_NAME, METADB_PG_USER)
 
     start_time = time.time()
 
@@ -144,7 +166,7 @@ class TestCentrifugation(unittest.TestCase):
         4.0K	2018-12-10
         """
         bucket_date = '2019-03-01'
-        fetch_autoclaved_bucket(TESTDATA_DIR, bucket_date)
+        #fetch_autoclaved_bucket(TESTDATA_DIR, bucket_date)
 
         print("Starting pg container")
         pg_container = start_pg(self.docker_client)
@@ -152,13 +174,14 @@ class TestCentrifugation(unittest.TestCase):
 
         pg_install_tables(pg_container)
 
-        shovel_container = run_centrifugation(self.docker_client, bucket_date)
-        self.to_remove_containers.append(shovel_container)
-        result = shovel_container.wait()
-        self.assertEqual(
-            result.get('StatusCode'),
-            0
-        )
+        run_centrifugation(bucket_date)
+        #shovel_container = run_centrifugation_docker(self.docker_client, bucket_date)
+        #self.to_remove_containers.append(shovel_container)
+        #result = shovel_container.wait()
+        #self.assertEqual(
+        #    result.get('StatusCode'),
+        #    0
+        #)
 
     def tearDown(self):
         for container in self.to_remove_containers:

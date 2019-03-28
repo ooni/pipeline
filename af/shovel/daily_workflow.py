@@ -6,6 +6,7 @@ import logging
 import uuid
 import re
 import os
+os.environ['TZ'] = 'UTC'
 
 from base64 import b64encode
 from datetime import datetime

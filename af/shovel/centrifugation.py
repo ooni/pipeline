@@ -19,6 +19,8 @@ from contextlib import closing
 from datetime import timedelta
 from itertools import groupby
 from operator import itemgetter
+from urlparse import urlparse
+from io import BytesIO
 
 import lz4.frame as lz4frame
 import mmh3
@@ -149,12 +151,26 @@ def dns_ttl(ttl):
     else:
         raise RuntimeError('Invalid DNS TTL', ttl)
 
+import boto3
+from botocore import UNSIGNED
+from botocore.config import Config
+from smart_open import smart_open
+
+def open_s3_or_disk(path):
+    p = urlparse(path)
+    if p.scheme == '':
+        return smart_open(path)
+    elif p.scheme == 's3':
+        return smart_open(path, config=Config(signature_version=UNSIGNED))
+    else:
+        raise Exception("Unsupported scheme or mode")
+
 ########################################################################
 
 def load_autoclaved_index(autoclaved_index):
     # Returns: {filename: file_sha1 for autoclaved}
     files = {}
-    with gzip.GzipFile(autoclaved_index, 'r') as indexfd:
+    with open_s3_or_disk(autoclaved_index) as indexfd:
         for _, doc in autoclaving.stream_json_blobs(indexfd):
             if 'file"' not in doc: # fast-path to avoid parsing 99.9% lines
                 continue
@@ -280,7 +296,8 @@ def copy_meta_from_index(pgconn, ingest, reingest, autoclaved_index, bucket):
         else:
             raise AssertionError('BUG: should never happen')
         dest_wbuf[(doc_type, key)].write(copy_row)
-    with gzip.GzipFile(autoclaved_index, 'r') as indexfd:
+
+    with open_s3_or_disk(autoclaved_index) as indexfd:
         atclv, rpt, frm = None, None, None # carry corresponding doc
         autoclaved_xref, report_xref = None, None # act as "should-process" flag as well
         report_datum = None # to skip empty reports
@@ -654,7 +671,7 @@ def iter_autoclaved_datum(pgconn, autoclaved_root, bucket):
         for (filename, file_size, file_crc32, file_sha1), itfile in groupby(cmeta, itemgetter(0, 1, 2, 3)):
             print 'Processing autoclaved {}'.format(filename)
             begin = time.time() # time.monotonic() is Python 3.5+
-            with open(os.path.join(autoclaved_root, filename)) as fd:
+            with open_s3_or_disk(os.path.join(autoclaved_root, filename)) as fd:
                 fd = ChecksummingTee(fd, NopTeeFd)
                 for (frame_off, frame_size), itframe in groupby(itfile, itemgetter(4, 5)):
                     fd.seek(frame_off)
@@ -1617,7 +1634,7 @@ ON CONFLICT (msm_no) DO UPDATE SET
 def meta_pg(in_root, bucket, postgres):
     print "meta_pg: {} {}".format(in_root, bucket)
 
-    assert in_root[-1] != '/' and '/' not in bucket and os.path.isdir(os.path.join(in_root, bucket))
+    #assert in_root[-1] != '/' and '/' not in bucket and os.path.isdir(os.path.join(in_root, bucket))
 
     # 1. Tables use bucket suffix to allow concurrent workers filling different tables.
     # 2. Tables do NOT include random string in the suffix (like timestamp) to
@@ -1678,7 +1695,7 @@ def parse_args():
     p = argparse.ArgumentParser(description='ooni-pipeline: public/autoclaved -> *')
     p.add_argument('--start', metavar='ISOTIME', type=isomidnight, help='Airflow execution date', required=True)
     p.add_argument('--end', metavar='ISOTIME', type=isomidnight, help='Airflow execution date + schedule interval', required=True)
-    p.add_argument('--autoclaved-root', metavar='DIR', type=dirname, help='Path to .../public/autoclaved', required=True)
+    p.add_argument('--autoclaved-root', metavar='DIR', help='Path to .../public/autoclaved', required=True)
     p.add_argument('--postgres', metavar='DSN', help='libpq data source name')
 
     opt = p.parse_args()
