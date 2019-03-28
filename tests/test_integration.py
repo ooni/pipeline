@@ -7,6 +7,7 @@ import traceback
 from datetime import datetime, timedelta
 from glob import glob
 
+import psycopg2
 import boto3
 from botocore import UNSIGNED
 from botocore.config import Config
@@ -19,6 +20,7 @@ TESTDATA_DIR = os.path.join(REPO_ROOT, 'testdata')
 
 METADB_NAME = 'ootestmetadb'
 METADB_PG_USER = 'oopguser'
+METADB_PG_HOST_PORT = 25432
 
 def start_pg(client):
     pg_container = client.containers.run(
@@ -29,7 +31,7 @@ def start_pg(client):
                 'POSTGRES_USER': METADB_PG_USER
             },
             ports={
-                '5432/tcp': 25432
+                '5432/tcp': METADB_PG_HOST_PORT
             },
             detach=True
     )
@@ -38,7 +40,8 @@ def start_pg(client):
         if exit_code == 0:
             break
         time.sleep(0.5)
-    return pg_container
+
+    return pg_container, pg_conn
 
 def pg_install_tables(container):
     _, socket = container.exec_run(cmd="psql -U {}".format(METADB_PG_USER), stdin=True, socket=True)
@@ -116,6 +119,13 @@ def run_centrifugation(client, bucket_date):
     print("runtime: {}".format(time.time() - start_time))
     return shovel_container
 
+def print_residuals(residuals):
+    for test_name, res in residuals.items():
+        print("## {}".format(test_name))
+        print("tk: {}".format(','.join(res['tk'])))
+        print("k: {}".format(','.join(res['k'])))
+        print("")
+
 class TestCentrifugation(unittest.TestCase):
     def setUp(self):
         self.docker_client = docker.from_env()
@@ -159,6 +169,35 @@ class TestCentrifugation(unittest.TestCase):
             result.get('StatusCode'),
             0
         )
+
+
+        pg_conn = psycopg2.connect(
+            dbname=METADB_PG_USER,
+            user=METADB_PG_USER,
+            port=METADB_PG_HOST_PORT,
+            host="localhost"
+        )
+        with pg_conn, pg_conn.cursor() as c:
+            c.execute("""SELECT
+test_name,
+ARRAY(SELECT jsonb_object_keys(residual)),
+ARRAY(SELECT jsonb_object_keys(residual->'test_keys'))
+FROM measurement
+JOIN report ON report.report_no = measurement.report_no
+JOIN residual ON residual.residual_no = measurement.residual_no
+GROUP BY 1,2,3
+ORDER BY 1;
+""")
+            residuals = {}
+            for test_name, keys, test_keys in c:
+                residuals[test_name] = residuals.get(test_name, {'k': set(), 'tk': set()})
+                for k in keys:
+                    residuals[test_name]['k'].add(k)
+                for tk in test_keys:
+                    residuals[test_name]['tk'].add(tk)
+
+        print_residuals(residuals)
+        self.assertEqual(len(residuals), 0)
 
     def tearDown(self):
         for container in self.to_remove_containers:
