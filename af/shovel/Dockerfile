@@ -41,7 +41,7 @@ RUN set -ex \
         /root/.cache \
     && :
 
-COPY canning.py daily_workflow.py autoclaving.py centrifugation.py originas2pg.py \
+COPY canning.py daily_workflow.py autoclaving.py centrifugation_aws.py centrifugation.py originas2pg.py \
     aws_s3_ls.py \
     aws_s3_lz4cat_sync.py \
     delete_canned_report.py \
