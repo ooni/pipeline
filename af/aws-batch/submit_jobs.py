@@ -12,9 +12,9 @@ def daterange(start_date, end_date):
         yield start_date + timedelta(n)
 
 AWS_REGION_NAME = 'us-east-2'
-AWS_ACCESS_KEY_ID = os.env['AWS_ACCESS_KEY_ID']
-AWS_SECRET_ACCESS_KEY = os.env['AWS_SECRET_ACCESS_KEY']
-PG_DSN = os.env['PG_DSN']
+AWS_ACCESS_KEY_ID = os.environ['AWS_ACCESS_KEY_ID']
+AWS_SECRET_ACCESS_KEY = os.environ['AWS_SECRET_ACCESS_KEY']
+PG_DSN = os.environ['PG_DSN']
 
 batch_client = boto3.client(
     'batch',
@@ -51,7 +51,7 @@ def submit_jobs(bucket_iter):
         response = batch_client.submit_job(
             jobName='bucket{}'.format(bucket_date),
             jobQueue='centrifugator-job-queue',
-            jobDefinition='centrifugator-job-definition:6',
+            jobDefinition='centrifugator-job-definition:7',
             containerOverrides={
                 'command': [
                     'python',
@@ -113,7 +113,7 @@ def main():
     missing_buckets = to_process_buckets()
 
     print("missing buckets: {}".format(len(missing_buckets)))
-    submit_jobs(missing_buckets)
+    submit_jobs(reversed(missing_buckets))
 
 if __name__ == '__main__':
     main()
