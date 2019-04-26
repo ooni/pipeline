@@ -43,6 +43,7 @@ MY	Makluman/Notification
 KR	http://warning.or.kr
 RO	Accesul dumneavoastră către acest site a fost restricționat
 GF	xtpage = "page-blocage-terrorisme"
+AF	<meta name="description" content="Access Denied - Afghan Wireless Communication Company">
 \.
 
 COPY fingerprint (origin_cc, header, header_prefix) FROM STDIN;
