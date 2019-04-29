@@ -1708,7 +1708,7 @@ class TelegramFeeder(BaseFeeder):
 
         http_blocking = t.get('telegram_http_blocking', None)
         tcp_blocking = t.get('telegram_tcp_blocking', None)
-        return '{:d}\t{:d}\t{}\t{:d}\t{}\t{}\t{}\t{}\t{}\n'.format(
+        return '{:d}\t{}\t{}\t{}\t{}\n'.format(
                     msm_no,
                     pg_quote(web_failure),
                     pg_quote(web_blocking),
