@@ -1686,9 +1686,47 @@ class VanillaTorFeeder(BaseFeeder):
         for key in known_keys:
             t.pop(key)
 
+class TelegramFeeder(BaseFeeder):
+    min_compat_code_ver = 4
+    data_table = sink_table = 'telegram'
+    columns = ('msm_no', 'telegram_web_failure', 'telegram_web_blocking',
+               'telegram_http_blocking', 'telegram_tcp_blocking')
 
-TITLE_REGEXP = re.compile("<title>(.*?)</title>", re.IGNORECASE | re.DOTALL)
+    @staticmethod
+    def row(msm_no, datum):
+        if datum['test_name'] != 'telegram':
+            return ''
+        t = datum['test_keys']
 
+        web_failure = t.get('telegram_web_failure', None)
+        web_status = t.get('telegram_web_status', None)
+        web_blocking = None
+        if web_status == 'ok':
+            web_blocking = False
+        elif web_status == 'blocked':
+            web_blocking = True
+
+        http_blocking = t.get('telegram_http_blocking', None)
+        tcp_blocking = t.get('telegram_tcp_blocking', None)
+        return '{:d}\t{:d}\t{}\t{:d}\t{}\t{}\t{}\t{}\t{}\n'.format(
+                    msm_no,
+                    pg_quote(web_failure),
+                    pg_quote(web_blocking),
+                    pg_quote(http_blocking),
+                    pg_quote(tcp_blocking)
+        )
+
+    @staticmethod
+    def pop(datum):
+        if datum['test_name'] != 'telegram':
+            return
+        t = datum['test_keys']
+        known_keys = ('telegram_web_failure', 'telegram_http_blocking',
+                      'telegram_web_status', 'telegram_tcp_blocking')
+        for key in known_keys:
+            t.pop(key)
+
+TITLE_REGEXP = re.compile('<title>(.*?)</title>', re.IGNORECASE | re.DOTALL)
 
 def get_title(body):
     if body is None:
@@ -2226,6 +2264,7 @@ DATA_TABLES = (
     TcpFeeder,
     DnsFeeder,
     VanillaTorFeeder,
+    TelegramFeeder,
     HttpControlFeeder,
     HttpRequestFeeder,
     HttpRequestFPFeeder,
