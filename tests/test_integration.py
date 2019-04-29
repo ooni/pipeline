@@ -198,7 +198,6 @@ def get_flag_counts():
             flags["anomaly"] = row[2]
     return flags
 
-
 def get_end_bucket_date(start_date):
     fmt = "%Y-%m-%d"
     return (datetime.strptime(start_date, fmt) + timedelta(1)).strftime(fmt)
