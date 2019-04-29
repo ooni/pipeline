@@ -44,7 +44,7 @@ metrics = setup_metrics(host="172.17.0.1", name="centrifugation")
 # - report & measurement: have significant amount of metadata and may be actually updated eventually
 # Technically `http_headers` was added after CODE_VER=3, but bad headers were
 # causing bucket-wide exception, so re-import is not forced.
-CODE_VER = 5
+CODE_VER = 6
 
 CODE_VER_REPROCESS = 0  # special `code_ver` value to do partial re-processing
 
@@ -1687,7 +1687,7 @@ class VanillaTorFeeder(BaseFeeder):
             t.pop(key)
 
 class TelegramFeeder(BaseFeeder):
-    min_compat_code_ver = 4
+    min_compat_code_ver = 6
     data_table = sink_table = 'telegram'
     columns = ('msm_no', 'telegram_web_failure', 'telegram_web_blocking',
                'telegram_http_blocking', 'telegram_tcp_blocking')
