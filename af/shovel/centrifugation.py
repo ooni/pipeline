@@ -44,7 +44,7 @@ CODE_VER_REPROCESS = 0 # special `code_ver` value to do partial re-processing
 
 FLAG_TRUE_TEMP = True # keep temporary tables if the flag is false
 FLAG_DEBUG_CHAOS = False # random fault injection
-FLAG_FAIL_FAST = False
+FLAG_FAIL_FAST = os.environ.get('OONI_FAIL_FAST') == '1'
 assert not (FLAG_DEBUG_CHAOS and FLAG_FAIL_FAST), 'Absurd!'
 
 if FLAG_DEBUG_CHAOS:
@@ -615,6 +615,8 @@ def copy_data_from_autoclaved(pgconn, stconn, in_root, bucket, bucket_code_ver):
         ver_feeders[None] = ver_feeders[CODE_VER_REPROCESS]
 
     for code_ver, autoclaved_no, report_no, msm_no, datum in iter_autoclaved_datum(pgconn, in_root, bucket):
+        if FLAG_FAIL_FAST: # log measurement leading to failure
+            print('measurement.id = {}'.format(datum.get('id')))
         queue, exc = [], []
         if code_ver is None:
             try:
