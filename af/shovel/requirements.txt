@@ -5,3 +5,5 @@ six==1.12.0
 mmh3==2.3.1
 simhash-py==0.4.0
 awscli==1.11.185
+statsd==3.2.1        # oonipl/metrics.py
+feedgenerator==1.9   # af/shovel/feeds_generation.py

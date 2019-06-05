@@ -1,6 +1,10 @@
 #!/usr/bin/env python2.7
 # -*- coding: utf-8 -*-
 
+""" Misc utility functions for tools run from CLI
+
+"""
+
 import os
 import datetime
 
