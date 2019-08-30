@@ -321,7 +321,8 @@ def test_run_small_bucket(docker_client, pg_container, pipeline_dir_ctx):
     with pg_conn() as conn:
         print_query_fetchone_output(conn, 'SELECT COUNT(*) FROM http_request_fp;')
 
-    assert flags["confirmed"] == 8, "confirmed count"
+    assert flags["confirmed"] == 8, "confirmed count does not match"
+    assert flags["anomaly"] == 55, "anomaly count does not match"
 
     # This forces reprocessing of data
     with pg_conn() as conn:
@@ -337,7 +338,7 @@ def test_run_small_bucket(docker_client, pg_container, pipeline_dir_ctx):
     print("flags[2]: {}".format(flags))
     with pg_conn() as conn:
         print_query_fetchone_output(conn, 'SELECT COUNT(*) FROM http_request_fp;')
-        print_query_fetchone_output(conn, 'SELECT COUNT(*) FROM telegram;')
+        print_query_fetchone_output(conn, 'SELECT * FROM telegram;')
 
     new_flags = get_flag_counts()
     for k, count in flags.items():

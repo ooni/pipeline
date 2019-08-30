@@ -1028,11 +1028,11 @@ def calc_measurement_flags(pgconn, flags_tbl, msm_tbl):
             FROM http_request_fp
             JOIN fingerprint USING (fingerprint_no)
             WHERE msm_no IN (SELECT msm_no FROM {msm})
-            AND msm_no >= %s AND msm_no <= %s
+            AND msm_no >= {msm_min} AND msm_no <= {msm_max}
 
             UNION ALL
             SELECT msm_no, true AS anomaly, NULL AS confirmed FROM http_verdict
-            WHERE msm_no IN (SELECT msm_no FROM {msm}) AND msm_no >= %s AND msm_no <= %s
+            WHERE msm_no IN (SELECT msm_no FROM {msm}) AND msm_no >= {msm_min} AND msm_no <= {msm_max}
               AND blocking != 'false' AND blocking IS NOT NULL
 
             UNION ALL
@@ -1040,13 +1040,13 @@ def calc_measurement_flags(pgconn, flags_tbl, msm_tbl):
             true AS anomaly,
             NULL AS confirmed
             FROM telegram
-            WHERE msm_no IN (SELECT msm_no FROM {msm}) AND msm_no >= %s AND msm_no <= %s
+            WHERE msm_no IN (SELECT msm_no FROM {msm}) AND msm_no >= {msm_min} AND msm_no <= {msm_max}
               AND (web_blocking = TRUE OR http_blocking = TRUE OR tcp_blocking = TRUE)
         ) t GROUP BY msm_no;
         """.format(
-                flags=flags_tbl, msm=msm_tbl
-            ),
-            [msm_min, msm_max, msm_min, msm_max],
+                flags=flags_tbl, msm=msm_tbl,
+                msm_min=int(msm_min or 0), msm_max=int(msm_max or 0)
+            )
         )
 
 
