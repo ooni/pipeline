@@ -163,6 +163,9 @@ def download_report_files(dst_dir):
         "2019-06-01/20190601T003644Z-IN-AS18196-web_connectivity-20190601T003645Z_AS18196_rpEBAw2sJIRwgKvm3JhOur2dNqOdtIb0ktIywHC3KAfXBgPik6-0.2.0-probe.json",
         "2019-08-18/20190818T094131Z-IR-AS31549-vanilla_tor-20190818T094132Z_AS31549_dDsgseksbdQ1sJn4Z1wDJD2Y2nHhFJa23DiyJlYTVKofPxWv5k-0.2.0-probe.json",
         "2019-08-18/20190818T081446Z-DE-AS8881-http_header_field_manipulation-20190818T081451Z_AS8881_zqlJZozB32oWWytaFyGZU0ouAyAIrEarNo1ahjwZ2xOEdF4RI9-0.2.0-probe.json",
+        "2019-08-29/20190829T105210Z-IR-AS31549-telegram-20190829T105214Z_AS31549_t32ZZ5av3B6yNruRIFhCnuT1dHTnwPk7vwIa9F0TAe064HG4tk-0.2.0-probe.json",
+        "2019-06-15/20190615T070248Z-ET-AS24757-whatsapp-20190615T070253Z_AS24757_gRi6dhAqgWa7Yp4tah4LX6Rl1j6c8kJuja3OgZranEpMicEj2p-0.2.0-probe.json",
+        "2019-06-27/20190627T214121Z-ET-AS24757-facebook_messenger-20190627T214126Z_AS24757_h8g9P5kTmmzyX1VyOjqcVonIbFNujm84l2leMCwC2gX3BI78fI-0.2.0-probe.json"
     ]
     base_url = "https://api.ooni.io/files/download/"
     for tn in textnames:
@@ -334,6 +337,7 @@ def test_run_small_bucket(docker_client, pg_container, pipeline_dir_ctx):
     print("flags[2]: {}".format(flags))
     with pg_conn() as conn:
         print_query_fetchone_output(conn, 'SELECT COUNT(*) FROM http_request_fp;')
+        print_query_fetchone_output(conn, 'SELECT COUNT(*) FROM telegram;')
 
     new_flags = get_flag_counts()
     for k, count in flags.items():

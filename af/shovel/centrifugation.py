@@ -50,7 +50,7 @@ CODE_VER_REPROCESS = 0  # special `code_ver` value to do partial re-processing
 
 FLAG_TRUE_TEMP = True  # keep temporary tables if the flag is false
 FLAG_DEBUG_CHAOS = False  # random fault injection
-FLAG_FAIL_FAST = False
+FLAG_FAIL_FAST = True
 assert not (FLAG_DEBUG_CHAOS and FLAG_FAIL_FAST), "Absurd!"
 
 if FLAG_DEBUG_CHAOS:
@@ -1029,10 +1029,19 @@ def calc_measurement_flags(pgconn, flags_tbl, msm_tbl):
             JOIN fingerprint USING (fingerprint_no)
             WHERE msm_no IN (SELECT msm_no FROM {msm})
             AND msm_no >= %s AND msm_no <= %s
+
             UNION ALL
             SELECT msm_no, true AS anomaly, NULL AS confirmed FROM http_verdict
             WHERE msm_no IN (SELECT msm_no FROM {msm}) AND msm_no >= %s AND msm_no <= %s
               AND blocking != 'false' AND blocking IS NOT NULL
+
+            UNION ALL
+            SELECT msm_no,
+            true AS anomaly,
+            NULL AS confirmed
+            FROM telegram
+            WHERE msm_no IN (SELECT msm_no FROM {msm}) AND msm_no >= %s AND msm_no <= %s
+              AND (web_blocking = TRUE OR http_blocking = TRUE OR tcp_blocking = TRUE)
         ) t GROUP BY msm_no;
         """.format(
                 flags=flags_tbl, msm=msm_tbl
@@ -1397,6 +1406,8 @@ class TcpFeeder(BaseFeeder):
     # NB: control_api_failure is also recorded as `control_failure` in `http_verdict`
     @staticmethod
     def row(msm_no, datum):
+        if datum["test_name"] not in ["tcp_connect", "web_connectivity"]:
+            return ""
         ret = ""
         test_keys = datum["test_keys"]
         control = test_keys.get("control", {}).get("tcp_connect", {})
@@ -1433,6 +1444,8 @@ class TcpFeeder(BaseFeeder):
 
     @staticmethod
     def pop(datum):
+        if datum["test_name"] not in ["tcp_connect", "web_connectivity"]:
+            return
         test_keys = datum["test_keys"]
         control = test_keys.get("control", {}).get("tcp_connect", {})
         test_keys.pop("control_failure", None)
@@ -1689,15 +1702,15 @@ class VanillaTorFeeder(BaseFeeder):
 class TelegramFeeder(BaseFeeder):
     min_compat_code_ver = 6
     data_table = sink_table = 'telegram'
-    columns = ('msm_no', 'telegram_web_failure', 'telegram_web_blocking',
-               'telegram_http_blocking', 'telegram_tcp_blocking')
+    columns = ('msm_no', 'web_failure', 'web_blocking',
+               'http_blocking', 'tcp_blocking',
+               'unreachable_endpoints', 'accessible_endpoints')
 
     @staticmethod
     def row(msm_no, datum):
         if datum['test_name'] != 'telegram':
             return ''
         t = datum['test_keys']
-
         web_failure = t.get('telegram_web_failure', None)
         web_status = t.get('telegram_web_status', None)
         web_blocking = None
@@ -1707,13 +1720,25 @@ class TelegramFeeder(BaseFeeder):
             web_blocking = True
 
         http_blocking = t.get('telegram_http_blocking', None)
-        tcp_blocking = t.get('telegram_tcp_blocking', None)
-        return '{:d}\t{}\t{}\t{}\t{}\n'.format(
+        tcp_connect = t.get('tcp_connect', [])
+        accessible_endpoints = 0
+        unreachable_endpoints = 0
+        for entry in tcp_connect:
+            s = entry.get('status', {})
+            success = s.get('success', None)
+            if success is False:
+                unreachable_endpoints += 1
+            if success is True:
+                accessible_endpoints += 1
+        tcp_blocking = unreachable_endpoints > accessible_endpoints # will be false on 0
+        return '{:d}\t{}\t{}\t{}\t{}\t{}\t{}\n'.format(
                     msm_no,
                     pg_quote(web_failure),
                     pg_quote(web_blocking),
                     pg_quote(http_blocking),
-                    pg_quote(tcp_blocking)
+                    pg_quote(tcp_blocking),
+                    pg_quote(unreachable_endpoints),
+                    pg_quote(accessible_endpoints),
         )
 
     @staticmethod
