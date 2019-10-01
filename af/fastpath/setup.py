@@ -3,22 +3,21 @@
 
 from setuptools import setup
 
-# Package meta-data.
-NAME = 'fastpath'
-DESCRIPTION = ''
+NAME = "fastpath"
+DESCRIPTION = ""
 
-# What packages are required for this module to be executed?
-REQUIRED = [
-]
+REQUIRED = []
 
 setup(
     name=NAME,
-    python_requires='>=3.6.0',
+    python_requires=">=3.6.0",
     packages=["fastpath", "fastpath.tests"],
-    entry_points={
-        'console_scripts': ['fastpath=fastpath.core:main'],
-    },
+    entry_points={"console_scripts": [
+        "fastpath=fastpath.core:main",
+        "detector=fastpath.detector:main",
+    ]},
     install_requires=REQUIRED,
     include_package_data=True,
-    zip_safe=False
+    zip_safe=False,
+    package_data={'fastpath': ['views/*.tpl', 'static/*']},
 )
