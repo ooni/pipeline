@@ -4,7 +4,7 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
-ExecStart=/usr/bin/detector --webapp
+ExecStart=/usr/bin/detector
 Restart=on-abort
 Type=simple
 RestartSec=2s
@@ -29,8 +29,6 @@ NoNewPrivileges=yes
 PrivateDevices=yes
 PrivateTmp=yes
 ProtectHome=yes
-#ProtectHome=read-only
-ProtectSystem=strict
 ProtectSystem=full
 ProtectKernelModules=yes
 ProtectKernelTunables=yes
