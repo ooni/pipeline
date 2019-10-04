@@ -1,5 +1,5 @@
 % rebase('page.tpl', title='Detector')
-$
+
 <svg viewBox="0 0 {{x2 + 100}} {{y2}}" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns="http://www.w3.org/2000/svg">
   <style>
 .txt { font: 13px sans-serif }

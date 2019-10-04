@@ -215,6 +215,7 @@ def fetch_past_data_selective(conn, start_date, cc, test_name, inp):
         input,
         measurement_start_time,
         probe_cc,
+        probe_asn,
         scores::text,
         test_name,
         tid
@@ -232,6 +233,7 @@ def fetch_past_data_selective(conn, start_date, cc, test_name, inp):
         input,
         measurement_start_time,
         probe_cc,
+        probe_asn,
         coalesce('') as scores,
         test_name,
         coalesce('') as tid
@@ -310,6 +312,70 @@ def detect_blocking_changes_one_stream(conn, cc, test_name, inp, start_date):
     # TODO: move into webapp?
     g = fetch_past_data_selective(conn, start_date, cc, test_name, inp)
     return detect_blocking_changes_1s_g(g, cc, test_name, inp, start_date)
+
+
+def load_asn_db():
+    db_f = conf.vardir / "ASN.csv"
+    log.info("Loading %s", db_f)
+    if not db_f.is_file():
+        log.info("No ASN file")
+        return {}
+
+    d = {}
+    with db_f.open() as f:
+        for line in f:
+            try:
+                asn, name = line.split(",", 1)
+                asn = int(asn)
+                name = name.strip()[1:-2].strip()
+                d[asn] = name
+            except:
+                continue
+
+    log.info("%d ASNs loaded", len(d))
+    return d
+
+
+
+def detect_blocking_changes_asn_one_stream(conn, cc, test_name, inp, start_date):
+    """Used by webapp
+    :returns: (msmts, changes)
+    """
+    g = fetch_past_data_selective(conn, start_date, cc, test_name, inp)
+    means = {}
+    msmts = []
+    changes = []
+    asn_breakdown = {}
+
+    for msm in g:
+        backfill_scores(msm)
+        k = (msm["probe_cc"], msm["test_name"], msm["input"])
+        assert isinstance(msm["scores"], dict), repr(msm["scores"])
+        change = detect_blocking_changes(means, msm, warmup=True)
+        date, mean, _ = means[k]
+        val = msm["scores"]["blocking_general"]
+        if change:
+            changes.append(change)
+
+        msmts.append((date, val, mean))
+        del date
+        del val
+        del mean
+        del change
+
+        # Generate charts for popular AS
+        asn = msm["probe_asn"]
+        a = asn_breakdown.get(asn, dict(means={}, msmts=[], changes=[]))
+        change = detect_blocking_changes(a["means"], msm, warmup=True)
+        date, mean, _ = a["means"][k]
+        val = msm["scores"]["blocking_general"]
+        a["msmts"].append((date, val, mean))
+        if change:
+            a["changes"].append(change)
+        asn_breakdown[asn] = a
+
+    log.debug("%d msmts processed", len(msmts))
+    return (msmts, changes, asn_breakdown)
 
 
 Change = namedtuple(
@@ -642,6 +708,7 @@ def main():
         import fastpath.detector_webapp as wa
 
         wa.db_conn = ro_conn
+        wa.asn_db = load_asn_db()
         log.info("Starting webapp")
         wa.bottle.TEMPLATE_PATH.insert(
             0, "/usr/lib/python3.7/dist-packages/fastpath/views"
