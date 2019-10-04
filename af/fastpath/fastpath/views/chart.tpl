@@ -26,13 +26,13 @@
   % pcx = pcy = None
   % for d, val, mean in msmts:
   % cx = (d - start_d).total_seconds() * x_scale + x1
-  % cy = y2 - min(max(val, 0) * 100, 300)
+  % cy = y2 - min(max(val, 0) * 200, 300)
   % r = "{:02x}".format(min(int(max(val, 0) * 170), 255))
   <circle class="dot" style="fill:#{{r}}ff00;" cx="{{cx}}" cy="{{cy}}"
                                                            r="4"></circle>
 
   % # moving average
-  % cy = y2 - min(max(mean, 0) * 100, 300)
+  % cy = y2 - min(max(mean, 0) * 200, 300)
   % if pcy is not None:
   <line x1="{{pcx}}" x2="{{cx}}" y1="{{pcy}}" y2="{{cy}}" stroke="#d2eaff"></line>
   % end
