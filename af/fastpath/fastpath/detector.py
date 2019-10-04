@@ -423,11 +423,11 @@ def detect_blocking_changes(means: dict, msm: dict, warmup=False):
     """
     # TODO: move out params
     upper_limit = 0.10
-    lower_limit = 0.02
+    lower_limit = 0.05
     # P: averaging value
     # p=1: no averaging
     # p=0.000001: very strong averaging
-    p = 0.005
+    p = 0.02
 
     inp = msm["input"]
     if inp is None:
