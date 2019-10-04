@@ -354,7 +354,8 @@ def prevent_future_date(msm):
     now = datetime.utcnow()
     if msm["measurement_start_time"] > now:
         delta = msm["measurement_start_time"] - now
-        log.info("Masking measurement %s in the future", delta)
+        some_id = msm.get("tid", None) or msm.get("report_id", "")
+        log.info("Masking measurement %s %s in the future", some_id, delta)
         msm["measurement_start_time"] = now
 
 
