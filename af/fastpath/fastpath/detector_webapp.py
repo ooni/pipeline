@@ -1,4 +1,11 @@
 """
+Detector web application
+
+Currently used only for tuning the detector, it runs event detection for one
+cc / test_name / input independently from the event detector daemon.
+The output are only displayed in charts and not used to generate RSS feeds
+or other.
+
 """
 
 # TODO: cleanup
@@ -92,7 +99,7 @@ def plot_series(conn, cc, test_name, inp, start_date):
     popular = popular[:20]
     asn_charts = []
     for asn in popular:
-        asn_name = asn_db.get(asn, asn)
+        asn_name = "AS{} {}".format(asn, asn_db.get(asn, ""))
         a = asn_breakdown[asn]
         try:
             c = generate_chart(a["msmts"], a["changes"], asn_name, test_name, inp)
