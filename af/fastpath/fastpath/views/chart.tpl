@@ -14,27 +14,28 @@
     border: 1px solid #888;
     stroke: #606060;
     stroke-width: .5px;
-    opacity: 0.2;
+    opacity: 0.1;
   }
   line.change {
     stroke-width: 4px;
     opacity: 0.2;
   }
   </style>
-  <text x="{{x1+100}}" y="20" class="txt">{{cc}} {{test_name}} {{inp}}</text>
+  <text x="{{x1+100}}" y="20" class="txt">{{title}}</text>
   <g id="msmts">
   % pcx = pcy = None
   % for d, val, mean in msmts:
   % cx = (d - start_d).total_seconds() * x_scale + x1
   % cy = y2 - min(max(val, 0) * 200, 300)
-  % r = "{:02x}".format(min(int(max(val, 0) * 170), 255))
-  <circle class="dot" style="fill:#{{r}}ff00;" cx="{{cx}}" cy="{{cy}}"
+  % #r = "{:02x}".format(min(int(max(val, 0) * 170), 255))
+  % col = "d60000" if val > .5 else "00d600"
+  <circle class="dot" style="fill:#{{col}};" cx="{{cx}}" cy="{{cy}}"
                                                            r="4"></circle>
 
   % # moving average
   % cy = y2 - min(max(mean, 0) * 200, 300)
   % if pcy is not None:
-  <line x1="{{pcx}}" x2="{{cx}}" y1="{{pcy}}" y2="{{cy}}" stroke="#d2eaff"></line>
+  <line x1="{{pcx}}" x2="{{cx}}" y1="{{pcy}}" y2="{{cy}}" stroke-width="2" stroke="#d2eaff"></line>
   % end
   % pcx, pcy = cx, cy
   % end
@@ -47,8 +48,9 @@
   % end
 
   </g>
+  % # start/end date labels
   <text x="{{x1-80}}" y="{{y2+30}}" class="txt">{{start_d}}</text>
-  <text x="{{x2-80}}" y="{{y2+30}}" class="txt">{{d}}</text>
+  <text x="{{x2-80}}" y="{{y2+30}}" class="txt">{{end_d}}</text>
 
   <line x1="{{x1}}" x2="{{x2}}" y1="{{y2}}" y2="{{y2}}" stroke="#888"></line>
   <line x1="{{x1}}" x2="{{x1}}" y1="{{y1}}" y2="{{y2}}" stroke="#888"></line>

@@ -42,7 +42,7 @@ bottle.install(
 
 
 @bottle.view("chart")
-def generate_chart(msmts, changes, cc, test_name, inp):
+def generate_chart(start_d, end_d, msmts, changes, title):
     """Render measurements and changes into a SVG chart
     :returns: dict
     """
@@ -52,10 +52,6 @@ def generate_chart(msmts, changes, cc, test_name, inp):
     y1 = 50
     y2 = 300
     # scale x
-    dates = [e[0] for e in msmts]
-    assert len(dates) >= 2
-    start_d = min(dates)
-    end_d = max(dates)
     delta = (end_d - start_d).total_seconds()
     assert delta != 0
     x_scale = (x2 - x1) / delta
@@ -65,13 +61,12 @@ def generate_chart(msmts, changes, cc, test_name, inp):
         changes=changes,
         x_scale=x_scale,
         start_d=start_d,
+        end_d=end_d,
         x1=x1,
         x2=x2,
         y1=y1,
         y2=y2,
-        cc=cc,
-        test_name=test_name,
-        inp=inp,
+        title=title,
     )
 
 
@@ -89,8 +84,16 @@ def plot_series(conn, cc, test_name, inp, start_date):
     (msmts, changes, asn_breakdown) = detect_blocking_changes_asn_one_stream(
         conn, cc, test_name, inp, start_date
     )
+    assert len(msmts) > 1
+    # Time range
     assert isinstance(msmts[0][0], datetime)
-    country_chart = generate_chart(msmts, changes, cc, test_name, inp)
+    start_d = min(e[0] for e in msmts)
+    end_d = max(e[0] for e in msmts)
+    delta = (end_d - start_d).total_seconds()
+    assert delta > 0
+
+    title = f"{cc} {test_name} {inp} {start_d} - {end_d}"
+    country_chart = generate_chart(start_d, end_d, msmts, changes, title)
 
     # Most popular ASNs
     popular = sorted(
@@ -99,10 +102,10 @@ def plot_series(conn, cc, test_name, inp, start_date):
     popular = popular[:20]
     asn_charts = []
     for asn in popular:
-        asn_name = "AS{} {}".format(asn, asn_db.get(asn, ""))
+        title = "AS{} {}".format(asn, asn_db.get(asn, ""))
         a = asn_breakdown[asn]
         try:
-            c = generate_chart(a["msmts"], a["changes"], asn_name, test_name, inp)
+            c = generate_chart(start_d, end_d, a["msmts"], a["changes"], title)
             asn_charts.append(c)
         except:
             log.error(a)
@@ -114,7 +117,6 @@ def plot_series(conn, cc, test_name, inp, start_date):
 
 
 @bottle.route("/chart")
-# @bottle.view("chart")
 @metrics.timer("generate_chart")
 def genchart():
     params = ("cc", "test_name", "input", "start_date")
