@@ -527,6 +527,9 @@ def setup():
     ap.add_argument("--webapp", action="store_true", help="Run webapp")
     ap.add_argument("--start-date", type=lambda d: parse_date(d))
     ap.add_argument("--db-host", default=DB_HOST, help="Database hostname")
+    ap.add_argument(
+        "--ro-db-host", default=RO_DB_HOST, help="Read-only database hostname"
+    )
     conf = ap.parse_args()
     if conf.devel:
         root = Path(os.getcwd())
@@ -744,7 +747,7 @@ def main():
     setup()
     log.info("Starting")
 
-    ro_conn = connect_to_db(RO_DB_HOST, RO_DB_USER, DB_NAME, RO_DB_PASSWORD)
+    ro_conn = connect_to_db(conf.ro_db_host, RO_DB_USER, DB_NAME, RO_DB_PASSWORD)
 
     if conf.webapp:
         import fastpath.detector_webapp as wa
