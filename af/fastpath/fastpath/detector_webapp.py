@@ -41,7 +41,6 @@ bottle.install(
 )
 
 
-@bottle.view("chart")
 def generate_chart(start_d, end_d, msmts, changes, title):
     """Render measurements and changes into a SVG chart
     :returns: dict
@@ -77,64 +76,91 @@ def index():
     return {}
 
 
-def plot_series(conn, cc, test_name, inp, start_date):
-    """Plot time-series for a CC / test_name / input as SVG chart
-    :returns: dict
+def plot_series(conn, ccs, test_names, inputs, start_date, split_asn):
+    """Generates time-series for CC / test_name / input
+    to be rendered as SVG charts
+    :returns: list of charts
     """
-    (msmts, changes, asn_breakdown) = detect_blocking_changes_asn_one_stream(
-        conn, cc, test_name, inp, start_date
-    )
-    assert len(msmts) > 1
-    # Time range
-    assert isinstance(msmts[0][0], datetime)
-    start_d = min(e[0] for e in msmts)
-    end_d = max(e[0] for e in msmts)
-    delta = (end_d - start_d).total_seconds()
-    assert delta > 0
+    log.error(repr(split_asn))
+    charts = []
+    for cc in ccs:
+        for test_name in test_names:
+            for inp in inputs:
+                log.info("Generating chart for %r %r %r", cc, test_name, inp)
+                # TODO: merge inputs here and in event detection?
 
-    title = f"{cc} {test_name} {inp} {start_d} - {end_d}"
-    country_chart = generate_chart(start_d, end_d, msmts, changes, title)
+                (msmts, changes, asn_breakdown) = detect_blocking_changes_asn_one_stream(
+                    conn, cc, test_name, inp, start_date
+                )
+                if len(msmts) < 2:
+                    log.debug("Not enough data")
+                    continue
 
-    # Most popular ASNs
-    popular = sorted(
-        asn_breakdown, key=lambda asn: len(asn_breakdown[asn]["msmts"]), reverse=True
-    )
-    popular = popular[:20]
-    asn_charts = []
-    for asn in popular:
-        title = "AS{} {}".format(asn, asn_db.get(asn, ""))
-        a = asn_breakdown[asn]
-        try:
-            c = generate_chart(start_d, end_d, a["msmts"], a["changes"], title)
-            asn_charts.append(c)
-        except:
-            log.error(a)
+                # Time range
+                assert isinstance(msmts[0][0], datetime)
+                start_d = min(e[0] for e in msmts)
+                end_d = max(e[0] for e in msmts)
+                delta = (end_d - start_d).total_seconds()
+                assert delta > 0
+                log.debug(delta)
 
-    charts = [country_chart] + asn_charts
-    charts = "".join(charts)
+                title = f"{cc} {test_name} {inp} {start_d} - {end_d}"
+                country_chart = generate_chart(start_d, end_d, msmts, changes, title)
+
+                charts.append(country_chart)
+
+                if split_asn:
+                    # Most popular ASNs
+                    popular = sorted(
+                        asn_breakdown, key=lambda asn: len(asn_breakdown[asn]["msmts"]), reverse=True
+                    )
+                    popular = popular[:20]
+                    for asn in popular:
+                        title = "AS{} {}".format(asn, asn_db.get(asn, ""))
+                        a = asn_breakdown[asn]
+                        try:
+                            c = generate_chart(start_d, end_d, a["msmts"], a["changes"], title)
+                            charts.append(c)
+                        except:
+                            log.error(a)
+
     return charts
 
 
 
 @bottle.route("/chart")
-@metrics.timer("generate_chart")
+@bottle.view("page")
+@metrics.timer("generate_charts")
 def genchart():
-    params = ("cc", "test_name", "input", "start_date")
-    q = {k: (request.query.get(k, None).strip() or None) for k in params}
+    params = ("ccs", "test_names", "inputs", "start_date", "split_asn")
+    q = {k: (request.query.get(k, "").strip() or None) for k in params}
 
-    cc = q["cc"]
-    assert len(cc) == 2, "CC must be 2 letters"
+    ccs = [i.strip() for i in q["ccs"].split(",") if i.strip()]
+    for cc in ccs:
+        assert len(cc) == 2, "CC must be 2 letters"
 
-    test_name = q["test_name"] or "web_connectivity"
-    inp = q["input"]
-    assert cc, "input is required"
+    test_names = q["test_names"].split(",") or ["web_connectivity",]
+    inputs = q["inputs"]
+    assert inputs, "Inputs are required"
+    inputs = [i.strip() for i in inputs.split(",") if i.strip()]
+    split_asn = q["split_asn"] is not None
     start_date = q["start_date"]
     if start_date:
         start_date = datetime.strptime(start_date, "%Y-%m-%d")
     else:
         start_date = datetime.now() - timedelta(days=10)
 
-    return plot_series(db_conn, cc, test_name, inp, start_date)
+    log.debug("Serving query %s %s %s %s", ccs, test_names, inputs, start_date)
+
+    charts = plot_series(db_conn, ccs, test_names, inputs, start_date, split_asn)
+    form = dict(
+        inputs=",".join(inputs),
+        test_names=",".join(test_names),
+        ccs=",".join(ccs),
+        start_date=start_date.strftime("%Y-%m-%d"),
+        split_asn=split_asn,
+    )
+    return dict(charts=charts, title="Detector", form=form)
 
 
 @bottle.error(500)
