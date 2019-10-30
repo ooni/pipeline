@@ -37,9 +37,9 @@ COMMENT ON COLUMN fastpath.filename IS 'File served by the fastpath host contain
 
 COMMENT ON COLUMN fastpath.scores IS 'Scoring metadata';
 
-GRANT SELECT ON fastpath TO amsapi;
-
-GRANT SELECT ON fastpath TO readonly;
+-- TODO add these to ansible role
+-- GRANT SELECT ON fastpath TO amsapi;
+-- GRANT SELECT ON fastpath TO readonly;
 
 COMMIT;
 
