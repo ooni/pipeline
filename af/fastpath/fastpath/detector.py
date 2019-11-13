@@ -18,9 +18,18 @@ Analise msmt score with moving average to detect blocking/unblocking
 
 Save outputs to local directories:
     - RSS feed                                      /var/lib/detector/rss/
+        rss/global.xml                All events, globally
+        rss/by-country/<CC>.xml       Events by country
+        rss/type-inp/<hash>.xml       Events by test_name and input
+        rss/cc-type-inp/<hash>.xml    Events by CC, test_name and input
     - JSON files with block/unblock events          /var/lib/detector/events/
     - JSON files with current blocking status       /var/lib/detector/status/
     - Internal data                                 /var/lib/detector/_internal/
+
+The tree under /var/lib/detector/ is served by Nginx with the exception of _internal
+
+Events are defined as changes between blocking and non-blocking on single
+CC / test_name / input tuples
 
 Outputs are "upserted" where possible. New runs overwrite/update old data.
 
@@ -35,7 +44,7 @@ See README.adoc
 # debdeps: python3-setuptools
 
 from argparse import ArgumentParser
-from collections import namedtuple
+from collections import namedtuple, deque
 from datetime import datetime, timedelta
 from pathlib import Path
 import atexit
@@ -73,6 +82,7 @@ DEFAULT_STARTTIME = datetime(2016, 1, 1)
 BASEURL = "http://fastpath.ooni.nu:8080"
 WEBAPP_URL = BASEURL + "/webapp"
 
+conf = None
 
 # Speed up psycopg2's JSON load
 psycopg2.extras.register_default_jsonb(loads=ujson.loads, globally=True)
@@ -545,6 +555,9 @@ def setup():
     conf.vardir = root / "var/lib/detector"
     conf.outdir = conf.vardir / "output"
     conf.rssdir = conf.outdir / "rss"
+    conf.rssdir_by_cc = conf.rssdir / "by-country"
+    conf.rssdir_by_tname_inp = conf.rssdir / "type-inp"
+    conf.rssdir_by_cc_tname_inp = conf.rssdir / "cc-type-inp"
     conf.eventdir = conf.outdir / "events"
     conf.statusdir = conf.outdir / "status"
     conf.pickledir = conf.outdir / "_internal"
@@ -552,6 +565,9 @@ def setup():
         conf.vardir,
         conf.outdir,
         conf.rssdir,
+        conf.rssdir_by_cc,
+        conf.rssdir_by_tname_inp,
+        conf.rssdir_by_cc_tname_inp,
         conf.eventdir,
         conf.statusdir,
         conf.pickledir,
@@ -616,6 +632,9 @@ def create_url(change):
 
 
 def basefn(cc, test_name, inp):
+    """Generate opaque filesystem-safe filename
+    inp can be "" or None (returning different hashes)
+    """
     d = f"{cc}:{test_name}:{inp}"
     h = hashlib.shake_128(d.encode()).hexdigest(16)
     return h
@@ -624,21 +643,92 @@ def basefn(cc, test_name, inp):
 # TODO rename changes to events?
 
 
-def update_rss_feeds(events, hashfname):
+def explorer_url(c: Change) -> str:
+    return f"https://explorer.ooni.org/measurement/{c.report_id}?input={c.input}"
+
+
+# TODO: regenerate RSS feeds once after the warmup terminates
+
+global_feed_cache = deque(maxlen=1000)
+
+
+def update_rss_feed_global(change: Change) -> None:
+    """Generate RSS feed for global events and write it in
+    /var/lib/detector/rss/global.xml
+    """
+    # The files are served by Nginx
+    global global_feed_cache
+    global_feed_cache.append(change)
+    feed = feedgenerator.Rss201rev2Feed(
+        title="OONI events",
+        link="https://explorer.ooni.org",
+        description="Blocked services and websites detected by OONI",
+        language="en",
+    )
+    for c in global_feed_cache:
+        feed.add_item(
+            title=f"{c.measurement_start_time} {c.probe_cc}",
+            link=explorer_url(c),
+            description=f"{c.measurement_start_time} {c.probe_cc} {c.input}"
+        )
+    feedfile = conf.rssdir / "global.xml"
+    with feedfile.open("w") as f:
+        feed.write(f, "utf-8")
+
+
+by_cc_feed_cache = {}
+
+
+def update_rss_feed_by_country(change: Change) -> None:
+    """Generate RSS feed for events grouped by country and write it in
+    /var/lib/detector/rss/by-country/<CC>.xml
+    """
+    # The files are served by Nginx
+    global by_cc_feed_cache
+    cc = change.probe_cc
+    if cc not in by_cc_feed_cache:
+        by_cc_feed_cache[cc] = deque(maxlen=1000)
+
+    by_cc_feed_cache[cc].append(change)
+    feed = feedgenerator.Rss201rev2Feed(
+        title=f"OONI events in {cc}",
+        link="https://explorer.ooni.org",
+        description="Blocked services and websites detected by OONI",
+        language="en",
+    )
+    for c in by_cc_feed_cache[cc]:
+        feed.add_item(
+            title=f"{c.measurement_start_time} {c.probe_cc}",
+            link=explorer_url(c),
+            description=f"{c.measurement_start_time} {c.probe_cc} {c.input}"
+        )
+    feedfile = conf.rssdir_by_cc / f"{cc}.xml"
+    with feedfile.open("w") as f:
+        feed.write(f, "utf-8")
+
+
+
+def update_rss_feeds_by_cc_tname_inp(events, hashfname):
+    """Generate RSS feed by cc / test_name / input and write
+    /var/lib/detector/rss/cc-type-inp/<hash>.xml
+    """
     # The files are served by Nginx
     feed = feedgenerator.Rss201rev2Feed(
         title="OONI events",
-        link="https://explorer.ooni.torproject.org/feeds/rss/blocked",
+        link="https://explorer.ooni.org",
         description="Blocked services and websites detected by OONI",
         language="en",
     )
     # TODO: render date properly and add blocked/unblocked
     # TODO: put only recent events in the feed (based on the latest event time)
     for e in events:
+        if not e["input"]:
+            continue
+
         feed.add_item(
             title="{} {}".format(e["measurement_start_time"], e["probe_cc"]),
-            link="https://explorer.ooni.torproject.org/measurement/{}".format(
-                e["report_id"]
+            link="https://explorer.ooni.org/measurement/{}?input=".format(
+                e["report_id"], e["input"]
             ),
             description="{} {} {}".format(
                 e["measurement_start_time"], e["probe_cc"], e["input"]
@@ -673,6 +763,12 @@ def upsert_change(change):
     debug_url = create_url(change)
     log.info("Change! %r %r", change, debug_url)
 
+    try:
+        update_rss_feed_global(change)
+        update_rss_feed_by_country(change)
+    except Exception as e:
+        log.error(e, exc_info=1)
+
     # Append change to a list in a JSON file
     # It contains all the block/unblock events for a given cc/test_name/input
     hashfname = basefn(change.probe_cc, change.test_name, change.input)
@@ -688,7 +784,7 @@ def upsert_change(change):
     with events_f.open("w") as f:
         ujson.dump(ecache, f)
 
-    update_rss_feeds(ecache["blocking_events"], hashfname)
+    update_rss_feeds_by_cc_tname_inp(ecache["blocking_events"], hashfname)
 
     update_status_files(ecache["blocking_events"])
 
@@ -728,6 +824,9 @@ def save_means(means):
     """
     pf = conf.pickledir / "means.pkl"
     pft = conf.pickledir / "means.pkl.tmp"
+    if not means:
+        log.error("No means to save")
+        return
     log.info("Saving %d means to %s", len(means), pf)
     latest = max(m[0] for m in means.values())
     log.info("Latest mean: %s", latest)
