@@ -87,63 +87,6 @@ psycopg2.extras.register_default_jsonb(loads=ujson.loads, globally=True)
 psycopg2.extras.register_default_json(loads=ujson.loads, globally=True)
 
 
-def fetch_past_data_onequery(conn, start_date):
-    """Fetch past data in large chunks
-    """
-    chunk_size = 20000
-    q = """
-    SELECT
-        coalesce(false) as anomaly,
-        coalesce(false) as confirmed,
-        input,
-        measurement_start_time,
-        probe_cc,
-        scores::text,
-        coalesce('') as report_id,
-        test_name,
-        tid
-    FROM fastpath
-    WHERE measurement_start_time >= %(start_date)s
-
-    UNION
-
-    SELECT
-        anomaly,
-        confirmed,
-        input,
-        measurement_start_time,
-        probe_cc,
-        coalesce('') as scores,
-        report_id,
-        test_name,
-        coalesce('') as tid
-
-    FROM measurement
-    JOIN report ON report.report_no = measurement.report_no
-    JOIN input ON input.input_no = measurement.input_no
-    WHERE measurement_start_time >= %(start_date)s
-
-    ORDER BY measurement_start_time
-    """
-
-    assert start_date
-    p = dict(start_date=str(start_date))
-
-    with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-        cur.execute(q, p)
-        while True:
-            rows = cur.fetchmany(chunk_size)
-            if not rows:
-                break
-            log.info("Fetched msmt chunk of size %d", len(rows))
-            for r in rows:
-                d = dict(r)
-                if d["scores"]:
-                    d["scores"] = ujson.loads(d["scores"])
-
-                yield d
-
-
 def fetch_past_data(conn, start_date):
     """Fetch past data in large chunks ordered by measurement_start_time
     """
@@ -630,6 +573,8 @@ def process_historical_data(ro_conn, rw_conn, start_date, means):
         if change is not None:
             upsert_change(change)
 
+        metrics.incr("processed_msmt")
+
     t.stop()
     for m in means.values():
         assert isinstance(m[2], bool), m
@@ -797,6 +742,9 @@ def upsert_change(change):
         update_rss_feed_by_country(change)
     except Exception as e:
         log.error(e, exc_info=1)
+
+    # TODO: currently unused
+    return
 
     # Append change to a list in a JSON file
     # It contains all the block/unblock events for a given cc/test_name/input
