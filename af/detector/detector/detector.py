@@ -676,6 +676,7 @@ def write_feed(feed, p: Path) -> None:
 global_feed_cache = deque(maxlen=1000)
 
 
+@metrics.timer("update_rss_feed_global")
 def update_rss_feed_global(change: Change) -> None:
     """Generate RSS feed for global events and write it in
     /var/lib/detector/rss/global.xml
@@ -704,6 +705,7 @@ def update_rss_feed_global(change: Change) -> None:
 by_cc_feed_cache = {}
 
 
+@metrics.timer("update_rss_feed_by_country")
 def update_rss_feed_by_country(change: Change) -> None:
     """Generate RSS feed for events grouped by country and write it in
     /var/lib/detector/rss/by-country/<CC>.xml
@@ -733,6 +735,7 @@ def update_rss_feed_by_country(change: Change) -> None:
     write_feed(feed, conf.rssdir_by_cc / f"{cc}.xml")
 
 
+@metrics.timer("update_rss_feeds_by_cc_tname_inp")
 def update_rss_feeds_by_cc_tname_inp(events, hashfname):
     """Generate RSS feed by cc / test_name / input and write
     /var/lib/detector/rss/cc-type-inp/<hash>.xml
