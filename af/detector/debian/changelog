@@ -1,0 +1,5 @@
+detector (0.1) UNRELEASED; urgency=medium
+
+  * event detector
+
+ -- Federico Ceratto <federico@debian.org>  Wed, 13 Nov 2019 18:59:53 +0000

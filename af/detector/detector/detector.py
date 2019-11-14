@@ -35,8 +35,6 @@ Outputs are "upserted" where possible. New runs overwrite/update old data.
 
 Runs as a service "detector" in a systemd unit and sandbox
 
-Deployed in the same .deb as fastpath
-
 See README.adoc
 """
 
@@ -62,8 +60,8 @@ import psycopg2.extras
 import ujson  # debdeps: python3-ujson
 import feedgenerator  # debdeps: python3-feedgenerator
 
-from fastpath.metrics import setup_metrics
-import fastpath.scoring as scoring
+from detector.metrics import setup_metrics
+import detector.scoring as scoring
 
 log = logging.getLogger("detector")
 metrics = setup_metrics(name="detector")
@@ -649,6 +647,17 @@ def explorer_url(c: Change) -> str:
 
 # TODO: regenerate RSS feeds once after the warmup terminates
 
+
+@metrics.timer("write_feed")
+def write_feed(feed, p: Path) -> None:
+    """Write out RSS feed atomically"""
+    tmp_p = p.with_suffix(".tmp")
+    with tmp_p.open("w") as f:
+        feed.write(f, "utf-8")
+
+    tmp_p.rename(p)
+
+
 global_feed_cache = deque(maxlen=1000)
 
 
@@ -666,14 +675,15 @@ def update_rss_feed_global(change: Change) -> None:
         language="en",
     )
     for c in global_feed_cache:
+        un = "" if c.blocked else "un"
         feed.add_item(
-            title=f"{c.measurement_start_time} {c.probe_cc}",
+            title=f"{c.input} {un}blocked in {c.probe_cc}",
             link=explorer_url(c),
-            description=f"{c.measurement_start_time} {c.probe_cc} {c.input}"
+            description=f"Change detected on {c.measurement_start_time}",
+            pubdate=c.measurement_start_time,
+            updateddate=datetime.utcnow(),
         )
-    feedfile = conf.rssdir / "global.xml"
-    with feedfile.open("w") as f:
-        feed.write(f, "utf-8")
+    write_feed(feed, conf.rssdir / "global.xml")
 
 
 by_cc_feed_cache = {}
@@ -697,15 +707,15 @@ def update_rss_feed_by_country(change: Change) -> None:
         language="en",
     )
     for c in by_cc_feed_cache[cc]:
+        un = "" if c.blocked else "un"
         feed.add_item(
-            title=f"{c.measurement_start_time} {c.probe_cc}",
+            title=f"{c.input} {un}blocked in {c.probe_cc}",
             link=explorer_url(c),
-            description=f"{c.measurement_start_time} {c.probe_cc} {c.input}"
+            description=f"Change detected on {c.measurement_start_time}",
+            pubdate=c.measurement_start_time,
+            updateddate=datetime.utcnow(),
         )
-    feedfile = conf.rssdir_by_cc / f"{cc}.xml"
-    with feedfile.open("w") as f:
-        feed.write(f, "utf-8")
-
+    write_feed(feed, conf.rssdir_by_cc / f"{cc}.xml")
 
 
 def update_rss_feeds_by_cc_tname_inp(events, hashfname):
@@ -734,9 +744,7 @@ def update_rss_feeds_by_cc_tname_inp(events, hashfname):
                 e["measurement_start_time"], e["probe_cc"], e["input"]
             ),
         )
-    feedfile = conf.rssdir / f"{hashfname}.xml"
-    with feedfile.open("w") as f:
-        feed.write(f, "utf-8")
+    write_feed(feed, conf.rssdir / f"{hashfname}.xml")
 
 
 def update_status_files(blocking_events):
@@ -762,6 +770,9 @@ def upsert_change(change):
     # Create DB tables in future if needed
     debug_url = create_url(change)
     log.info("Change! %r %r", change, debug_url)
+    if not change.report_id:
+        log.error("Empty report_id")
+        return
 
     try:
         update_rss_feed_global(change)
@@ -849,13 +860,13 @@ def main():
     ro_conn = connect_to_db(conf.ro_db_host, RO_DB_USER, DB_NAME, RO_DB_PASSWORD)
 
     if conf.webapp:
-        import fastpath.detector_webapp as wa
+        import detector.detector_webapp as wa
 
         wa.db_conn = ro_conn
         wa.asn_db = load_asn_db()
         log.info("Starting webapp")
         wa.bottle.TEMPLATE_PATH.insert(
-            0, "/usr/lib/python3.7/dist-packages/fastpath/views"
+            0, "/usr/lib/python3.7/dist-packages/detector/views"
         )
         wa.bottle.run(port=8880, debug=conf.devel)
         log.info("Exiting webapp")
@@ -867,7 +878,8 @@ def main():
 
     rw_conn = connect_to_db(conf.db_host, DB_USER, DB_NAME, DB_PASSWORD)
 
-    start_date = latest_mean if latest_mean else DEFAULT_STARTTIME
+    td = timedelta(weeks=6)
+    start_date = latest_mean - td if latest_mean else DEFAULT_STARTTIME
     process_historical_data(ro_conn, rw_conn, start_date, means)
     save_means(means)
 

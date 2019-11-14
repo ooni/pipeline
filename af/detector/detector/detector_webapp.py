@@ -17,11 +17,11 @@ import json
 from bottle import request
 import bottle
 
-from fastpath.detector import (
+from detector.detector import (
     detect_blocking_changes_asn_one_stream,
 )
 
-from fastpath.metrics import setup_metrics
+from detector.metrics import setup_metrics
 
 log = logging.getLogger("detector")
 metrics = setup_metrics(name="detector")

@@ -10,11 +10,11 @@ import json
 import bottle
 import pytest
 
-import fastpath.detector as dt
-import fastpath.detector_webapp as webapp
+import detector.detector as dt
+import detector.detector_webapp as webapp
 
-bottle.TEMPLATE_PATH.insert(0, "fastpath/views")
-data = Path("fastpath/tests/data")
+bottle.TEMPLATE_PATH.insert(0, "detector/views")
+data = Path("detector/tests/data")
 
 
 def datadir(p):
@@ -121,7 +121,7 @@ def test_chart_ww_BR_2019_generate_chart():
         assert ts == str(c.measurement_start_time)
         assert m == c.mean
 
-    with Path("fastpath/views/chart_alone.tpl").open() as f:
+    with Path("detector/views/chart_alone.tpl").open() as f:
         tpl = webapp.bottle.SimpleTemplate(f.read())
 
     cd = webapp.generate_chart(msmts, changes, cc, test_name, inp)
@@ -157,7 +157,7 @@ def test_chart_ww_BR_2018_generate_chart():
         assert ts == str(c.measurement_start_time)
         assert m == c.mean
 
-    with Path("fastpath/views/chart_alone.tpl").open() as f:
+    with Path("detector/views/chart_alone.tpl").open() as f:
         tpl = webapp.bottle.SimpleTemplate(f.read())
 
     cd = webapp.generate_chart(msmts, changes, cc, test_name, inp)
@@ -193,7 +193,7 @@ def test_bench_detect_blocking_changes(benchmark):
         g.append(v)
     (msmts, changes) = benchmark(bench_detect_blocking_changes_1s_g, g)
 
-    with Path("fastpath/views/chart_alone.tpl").open() as f:
+    with Path("detector/views/chart_alone.tpl").open() as f:
         tpl = webapp.bottle.SimpleTemplate(f.read())
 
     cc = "BR"

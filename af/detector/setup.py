@@ -3,7 +3,7 @@
 
 from setuptools import setup
 
-NAME = "fastpath"
+NAME = "detector"
 DESCRIPTION = ""
 
 REQUIRED = []
@@ -11,12 +11,12 @@ REQUIRED = []
 setup(
     name=NAME,
     python_requires=">=3.6.0",
-    packages=["fastpath", "fastpath.tests"],
+    packages=["detector", "detector.tests"],
     entry_points={"console_scripts": [
-        "fastpath=fastpath.core:main",
+        "detector=detector.detector:main",
     ]},
     install_requires=REQUIRED,
     include_package_data=True,
     zip_safe=False,
-    package_data={'fastpath': ['views/*.tpl', 'static/*']},
+    package_data={'detector': ['views/*.tpl', 'static/*']},
 )
