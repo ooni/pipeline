@@ -43,14 +43,14 @@ See README.adoc
 
 from argparse import ArgumentParser
 from collections import namedtuple, deque
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
-import atexit
 import hashlib
 import logging
 import os
 import pickle
 import select
+import signal
 import sys
 
 from systemd.journal import JournalHandler  # debdeps: python3-systemd
@@ -145,7 +145,7 @@ def fetch_past_data_onequery(conn, start_date):
 
 
 def fetch_past_data(conn, start_date):
-    """Fetch past data in large chunks
+    """Fetch past data in large chunks ordered by measurement_start_time
     """
     q = """
     SELECT
@@ -180,7 +180,7 @@ def fetch_past_data(conn, start_date):
     JOIN input ON input.input_no = measurement.input_no
     WHERE measurement_start_time >= %(start_date)s
     AND measurement_start_time < %(end_date)s
-
+    ORDER BY measurement_start_time
     """
     assert start_date
 
@@ -572,8 +572,6 @@ def setup():
     ):
         p.mkdir(parents=True, exist_ok=True)
 
-    # TODO: implement a way to force reprocessing old data
-
 
 @metrics.timer("handle_new_measurement")
 def handle_new_msg(msg, means, rw_conn):
@@ -600,6 +598,20 @@ def connect_to_db(db_host, db_user, db_name, db_password):
     return conn
 
 
+def snapshot_means(msm, last_snapshot_date, means):
+    """Save means to disk every month
+    """
+    # TODO: add config parameter to recompute past data
+    t = msm["measurement_start_time"]
+    month = date(t.year, t.month, 1)
+    if month == last_snapshot_date:
+        return last_snapshot_date
+
+    log.info("Saving %s monthly snapshot", month)
+    save_means(means, month)
+    return month
+
+
 def process_historical_data(ro_conn, rw_conn, start_date, means):
     """Process past data
     """
@@ -607,9 +619,12 @@ def process_historical_data(ro_conn, rw_conn, start_date, means):
     log.info("Running process_historical_data from %s", start_date)
     t = metrics.timer("process_historical_data").start()
     cnt = 0
+    # fetch_past_data returns measurements ordered by measurement_start_time
+    last_snap = None
     for past_msm in fetch_past_data(ro_conn, start_date):
         backfill_scores(past_msm)
         prevent_future_date(past_msm)
+        last_snap = snapshot_means(past_msm, last_snap, means)
         change = detect_blocking_changes(means, past_msm, warmup=True)
         cnt += 1
         if change is not None:
@@ -645,7 +660,7 @@ def explorer_url(c: Change) -> str:
     return f"https://explorer.ooni.org/measurement/{c.report_id}?input={c.input}"
 
 
-# TODO: regenerate RSS feeds once after the warmup terminates
+# TODO: regenerate RSS feeds (only) once after the warmup terminates
 
 
 @metrics.timer("write_feed")
@@ -804,8 +819,8 @@ def load_means():
     """Load means from a pkl file
     The file is safely owned by the detector.
     """
-    log.info("Loading means")
     pf = conf.pickledir / "means.pkl"
+    log.info("Loading means from %s", pf)
     if pf.is_file():
         perms = pf.stat().st_mode
         assert (perms & 2) == 0, "Insecure pickle permissions %s" % oct(perms)
@@ -830,11 +845,12 @@ def load_means():
     return {}, None
 
 
-def save_means(means):
+def save_means(means, date):
     """Save means atomically. Protocol 4
     """
-    pf = conf.pickledir / "means.pkl"
-    pft = conf.pickledir / "means.pkl.tmp"
+    tstamp = date.strftime(".%Y-%m-%d") if date else ""
+    pf = conf.pickledir / f"means{tstamp}.pkl"
+    pft = pf.with_suffix(".tmp")
     if not means:
         log.error("No means to save")
         return
@@ -874,14 +890,23 @@ def main():
 
     means, latest_mean = load_means()
     log.info("Latest mean: %s", latest_mean)
-    atexit.register(save_means, means)
+
+    # Register exit handlers
+    def save_means_on_exit(*a):
+        log.info("Received SIGINT / SIGTERM")
+        save_means(means, None)
+        log.info("Exiting")
+        sys.exit()
+
+    signal.signal(signal.SIGINT, save_means_on_exit)
+    signal.signal(signal.SIGTERM, save_means_on_exit)
 
     rw_conn = connect_to_db(conf.db_host, DB_USER, DB_NAME, DB_PASSWORD)
 
     td = timedelta(weeks=6)
     start_date = latest_mean - td if latest_mean else DEFAULT_STARTTIME
     process_historical_data(ro_conn, rw_conn, start_date, means)
-    save_means(means)
+    save_means(means, None)
 
     log.info("Starting real-time processing")
     with rw_conn.cursor() as cur:
