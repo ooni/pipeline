@@ -29,6 +29,9 @@ DB_HOST = "hkgmetadb.infra.ooni.io"
 DB_USER = "shovel"
 DB_NAME = "metadb"
 DB_PASSWORD = "yEqgNr2eXvgG255iEBxVeP"  # This is already made public
+PG_DSN = f"host={DB_HOST} user={DB_USER} dbname={DB_NAME}"
+if "PG_DSN" in os.environ:
+    PG_DSN = os.environ["PG_DSN"]
 FREE_SPACE_GB = 10.2
 
 
@@ -42,10 +45,9 @@ def _ping():
 
 def setup():
     global conn, _autocommit_conn
-    dsn = f"host={DB_HOST} user={DB_USER} dbname={DB_NAME} password={DB_PASSWORD}"
-    log.info("Connecting to database: %r", dsn)
-    conn = psycopg2.connect(dsn)
-    _autocommit_conn = psycopg2.connect(dsn)
+    log.info("Connecting to database: %r", PG_DSN)
+    conn = psycopg2.connect(PG_DSN)
+    _autocommit_conn = psycopg2.connect(PG_DSN)
     _autocommit_conn.autocommit = True
     _ping()
 
