@@ -64,7 +64,7 @@ def load_multiple(fn, touch=True) -> tuple:
                         yield (line, None)
 
                 elif m.name.endswith(".yaml"):
-                    continue # FIXME
+                    continue  # FIXME
                     bucket_tstamp = "FIXME"
                     for msm in iter_yaml_msmt_normalized(k, bucket_tstamp):
                         yield (None, msm)

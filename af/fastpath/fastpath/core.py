@@ -13,6 +13,7 @@ See README.adoc
 # debdeps: python3-setuptools
 
 from argparse import ArgumentParser, Namespace
+from base64 import b64decode
 from configparser import ConfigParser
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -333,7 +334,21 @@ def match_fingerprints(measurement):
                 # fp: {"body_match": "...", "locality": "..."}
                 tb = time.time()
                 bm = fp["body_match"]
-                idx = body.find(bm)
+                if isinstance(body, str):
+                    idx = body.find(bm)
+
+                elif (
+                    isinstance(body, dict)
+                    and "data" in body
+                    and body.get("format", "") == "base64"
+                ):
+                    rbody = b64decode(body["data"])
+                    idx = rbody.find(bm.encode())
+
+                else:
+                    logbug(2, "incorrect body", measurement)
+                    continue
+
                 if idx != -1:
                     matches.append(fp)
                     log.debug("matched body fp %s %r at pos %d", msm_cc, bm, idx)
@@ -1058,8 +1073,8 @@ def shut_down(queue):
     log.info("Shutting down workers")
     [queue.put(None) for n in range(NUM_WORKERS)]
     # FIXME
-    #queue.close()
-    #queue.join_thread()
+    # queue.close()
+    # queue.join_thread()
 
 
 def core():
