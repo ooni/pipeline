@@ -86,7 +86,7 @@ def upsert_summary(msm, scores, tid, filename, update):
     args = (
         tid,
         msm["report_id"],
-        msm["input"],
+        msm.get("input", None),
         msm["probe_cc"],
         asn,
         msm["test_name"],
