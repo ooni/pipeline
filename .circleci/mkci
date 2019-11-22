@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""Build application packages and upload them to bintray.
+Works on TravisCI, CircleCI and locally. Detect which package need to be rebuilt.
+Support "release" packages and PR/testing.
+"""
+
+# debdeps: git
+from argparse import ArgumentParser
+from os import getenv
+from pathlib import Path
+from requests.auth import HTTPBasicAuth
+from subprocess import run
+from typing import List
+import requests
+import sys
+
+
+def run2(cmd, **kw):
+    p = run(cmd.split(), capture_output=True, **kw)
+    if p.returncode != 0:
+        raise Exception(f"'{cmd}' returned: {p.returncode}")
+    return p.stdout.decode()
+
+
+def detect_changed_packages() -> List[Path]:
+    DCH = "debian/changelog"
+    commit = run2("git merge-base master HEAD")
+    changes = run2(f"git diff --name-only {commit}")
+    changes += "af/fastpath\n"
+    print(repr(changes))
+    pkgs = set()
+    for c in changes.splitlines():
+        c = Path(c)
+        if c.as_posix().endswith(DCH):
+            pkgs.add(c.parent.parent)
+            continue
+        while c.name:
+            if c.joinpath(DCH).is_file():
+                pkgs.add(c)
+            c = c.parent
+
+    return sorted(pkgs)
+
+
+def runi(cmd: str, cwd: Path) -> None:
+    run(cmd.split(), cwd=cwd, check=True)
+
+
+def build(p) -> List[Path]:
+    ver = run2("dpkg-parsechangelog --show-field Version", cwd=p).strip()
+    runi("sudo apt-get build-dep -qy --no-install-recommends .", p)
+    assert ver, f"No version number found in {p}/debian/changelog"
+    if getenv("CIRCLE_PULL_REQUEST"):
+        # CIRCLE_PR_NUMBER is broken
+        pr_num = getenv("CIRCLE_PULL_REQUEST", "").rsplit("/", 1)[-1]
+        build_num = getenv("CIRCLE_BUILD_NUM")
+        ver = f"${ver}~pr{pr_num}-{build_num}"
+
+    run2(f"dch -v {ver} 'PR version'", cwd=p)
+    run2(f"dch -r {ver} 'PR version'", cwd=p)
+    ver2 = run2("dpkg-parsechangelog --show-field Version", cwd=p).strip()
+    assert ver == ver2, ver + " <--> " + ver2
+    runi("fakeroot debian/rules build", p)
+    runi("fakeroot debian/rules binary", p)
+    with p.joinpath("debian/files").open() as f:
+        return [p.parent.joinpath(line.split()[0]) for line in f]
+
+
+def ci() -> None:
+    err = "BINTRAY_USERNAME or BINTRAY_API_KEY environment variables not set"
+    assert getenv("BINTRAY_USERNAME") and getenv( "BINTRAY_API_KEY"), err
+    pkgdirs = detect_changed_packages()
+    if not pkgdirs:
+        return
+    print("Building {pkgdirs}")
+    run2("sudo apt-get update -q")
+    run2("sudo apt-get install -qy --no-install-recommends curl devscripts")
+
+    pkgs_lists = [build(p) for p in pkgdirs]
+    for pli in pkgs_lists:
+        for p in pli:
+            upload(p)
+
+
+def upload(fi) -> None:
+    """Upload to Bintray"""
+    assert fi.is_file()
+    pname, pver, arch = fi.name.split("_")
+    btuser = getenv("BINTRAY_USERNAME")
+    assert btuser
+    auth = HTTPBasicAuth(btuser, getenv("BINTRAY_API_KEY"))
+    org = "ooni"
+    repo = "internal-pull-requests"
+    url = f"https://api.bintray.com/content/{org}/{repo}/{pname}/{pver}/{fi.name}"
+    params = dict(publish=1, override=0)
+    with open(fi, "rb") as f:
+        resp = requests.put(url, auth=auth, params=params, data=f)
+    if not resp.ok:
+        print(resp.text)
+        sys.exit(1)
+
+
+
+def main():
+    ap = ArgumentParser(description=__doc__)
+    ap.add_argument("action", choices=("upload", "scan", "ci", "build"))
+    args = ap.parse_args()
+    if args.action == "ci":
+        ci()
+    elif args.action == "scan":
+        print(sorted(detect_changed_packages()))
+    elif args.action == "upload":
+        pass
+    elif args.action == "build":
+        pass
+
+
+if __name__ == "__main__":
+    main()
