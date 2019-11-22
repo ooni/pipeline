@@ -69,12 +69,13 @@ def build(p) -> List[Path]:
 def ci() -> None:
     err = "BINTRAY_USERNAME or BINTRAY_API_KEY environment variables not set"
     assert getenv("BINTRAY_USERNAME") and getenv( "BINTRAY_API_KEY"), err
+    run2("sudo apt-get update -q")
     pkgdirs = detect_changed_packages()
+    run2("sudo apt-get install -qy --no-install-recommends git")
     if not pkgdirs:
         return
     print("Building {pkgdirs}")
-    run2("sudo apt-get update -q")
-    run2("sudo apt-get install -qy --no-install-recommends curl devscripts")
+    run2("sudo apt-get install -qy --no-install-recommends devscripts")
 
     pkgs_lists = [build(p) for p in pkgdirs]
     for pli in pkgs_lists:

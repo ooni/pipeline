@@ -6,4 +6,7 @@ jobs:
     steps:
       - checkout
       - run:
-          command: ./.circleci/mkci ci
+          command: |
+            apt-get update -q
+            apt-get install -y --no-install-recommends python3 python3-requests
+            ./.circleci/mkci ci
