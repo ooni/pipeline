@@ -48,13 +48,13 @@ def runi(cmd: str, cwd: Path) -> None:
 
 def build(p) -> List[Path]:
     ver = run2("dpkg-parsechangelog --show-field Version", cwd=p).strip()
-    runi("sudo apt-get build-dep -qy --no-install-recommends .", p)
+    runi("apt-get build-dep -qy --no-install-recommends .", p)
     assert ver, f"No version number found in {p}/debian/changelog"
     if getenv("CIRCLE_PULL_REQUEST"):
         # CIRCLE_PR_NUMBER is broken
         pr_num = getenv("CIRCLE_PULL_REQUEST", "").rsplit("/", 1)[-1]
         build_num = getenv("CIRCLE_BUILD_NUM")
-        ver = f"${ver}~pr{pr_num}-{build_num}"
+        ver = f"{ver}~pr{pr_num}-{build_num}"
 
     run2(f"dch -v {ver} 'PR version'", cwd=p)
     run2(f"dch -r {ver} 'PR version'", cwd=p)
@@ -69,13 +69,13 @@ def build(p) -> List[Path]:
 def ci() -> None:
     err = "BINTRAY_USERNAME or BINTRAY_API_KEY environment variables not set"
     assert getenv("BINTRAY_USERNAME") and getenv( "BINTRAY_API_KEY"), err
-    run2("sudo apt-get update -q")
+    run2("apt-get update -q")
+    run2("apt-get install -qy --no-install-recommends git")
     pkgdirs = detect_changed_packages()
-    run2("sudo apt-get install -qy --no-install-recommends git")
     if not pkgdirs:
         return
-    print("Building {pkgdirs}")
-    run2("sudo apt-get install -qy --no-install-recommends devscripts")
+    print(f"Building {pkgdirs}")
+    run2("apt-get install -qy --no-install-recommends devscripts")
 
     pkgs_lists = [build(p) for p in pkgdirs]
     for pli in pkgs_lists:
