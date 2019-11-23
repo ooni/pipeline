@@ -56,7 +56,7 @@ def build(p) -> List[Path]:
         build_num = getenv("CIRCLE_BUILD_NUM")
         ver = f"{ver}~pr{pr_num}-{build_num}"
 
-    run2(f"dch -v {ver} 'PR version'", cwd=p)
+    run2(f"dch -b -v {ver} 'PR version'", cwd=p)
     run2(f"dch -r {ver} 'PR version'", cwd=p)
     ver2 = run2("dpkg-parsechangelog --show-field Version", cwd=p).strip()
     assert ver == ver2, ver + " <--> " + ver2
