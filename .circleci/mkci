@@ -161,7 +161,7 @@ def main():
     ap.add_argument("-o", "--org", default=DEFAULT_ORG, help="Bintray org name")
     args, extra = ap.parse_known_args()
     if args.action == "ci":
-        ci()
+        ci(args)
     elif args.action == "scan":
         print(sorted(detect_changed_packages()))
     elif args.action == "upload":
