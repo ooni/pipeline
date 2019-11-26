@@ -26,7 +26,9 @@ def run2(cmd, **kw):
     return p.stdout.decode()
 
 
-def runi(cmd: str, cwd: Path) -> None:
+def runi(cmd: str, cwd: Path, sudo=False) -> None:
+    if sudo:
+        cmd = f"sudo {cmd}"
     run(cmd.split(), cwd=cwd, check=True)
 
 
@@ -49,27 +51,52 @@ def detect_changed_packages() -> List[Path]:
     return sorted(pkgs)
 
 
-def build(p) -> List[Path]:
-    ver = run2("dpkg-parsechangelog --show-field Version", cwd=p).strip()
-    runi("apt-get build-dep -qy --no-install-recommends .", p)
-    assert ver, f"No version number found in {p}/debian/changelog"
-    if getenv("CIRCLE_PULL_REQUEST"):
-        # CIRCLE_PR_NUMBER is broken
-        pr_num = getenv("CIRCLE_PULL_REQUEST", "").rsplit("/", 1)[-1]
-        build_num = getenv("CIRCLE_BUILD_NUM")
-        ver = f"{ver}~pr{pr_num}-{build_num}"
+def trim_compare(url: str) -> str:
+    """Shorten GitHub URLs used to compare changes"""
+    if url.startswith("https://github.com/") and "..." in url:
+        base, commits = url.rsplit("/", 1)
+        if len(commits) == 83:
+            beginning = commits[0:8]
+            end = commits[43:43+8]
+            return f"{base}/{beginning}...{end}"
 
-    run2(f"dch -b -v {ver} 'PR version'", cwd=p)
-    run2(f"dch -r {ver} 'PR version'", cwd=p)
-    ver2 = run2("dpkg-parsechangelog --show-field Version", cwd=p).strip()
-    assert ver == ver2, ver + " <--> " + ver2
+    return url
+
+
+
+def buildpkg(p) -> List[Path]:
+    """Build one package, installing required dependencies"""
+    print(f"Building package in {p}")
+    ver = run2("dpkg-parsechangelog --show-field Version", cwd=p).strip()
+    assert ver, f"No version number found in {p}/debian/changelog"
+    sudo = True
+    if getenv("CIRCLECI"):
+        # Running in CircleCI
+        sudo = False
+        comp = trim_compare(getenv("CIRCLE_COMPARE_URL", ""))  # show changes in VCS
+        if getenv("CIRCLE_PULL_REQUEST"):
+            # This is a PR: build ~pr<N>-<N> version. CIRCLE_PR_NUMBER is broken
+            pr_num = getenv("CIRCLE_PULL_REQUEST", "").rsplit("/", 1)[-1]
+            build_num = getenv("CIRCLE_BUILD_NUM")
+            ver = f"{ver}~pr{pr_num}-{build_num}"
+            run2(f"dch -b -v {ver} {comp}", cwd=p)
+            run2(f"dch -r {ver} {comp}", cwd=p)
+            ver2 = run2("dpkg-parsechangelog --show-field Version", cwd=p).strip()
+            assert ver == ver2, ver + " <--> " + ver2
+        else:
+            run2(f"dch -b -v {ver} {comp}", cwd=p)
+            run2(f"dch -r {ver} {comp}", cwd=p)
+            ver2 = run2("dpkg-parsechangelog --show-field Version", cwd=p).strip()
+            assert ver == ver2, ver + " <--> " + ver2
+
+    runi("apt-get build-dep -qy --no-install-recommends .", p, sudo=sudo)
     runi("fakeroot debian/rules build", p)
     runi("fakeroot debian/rules binary", p)
     with p.joinpath("debian/files").open() as f:
         return [p.parent.joinpath(line.split()[0]) for line in f]
 
 
-def ci() -> None:
+def ci(args) -> None:
     # TODO: detect sudo presence
     err = "BINTRAY_USERNAME or BINTRAY_API_KEY environment variables not set"
     assert getenv("BINTRAY_USERNAME") and getenv("BINTRAY_API_KEY"), err
@@ -81,10 +108,19 @@ def ci() -> None:
     print(f"Building {pkgdirs}")
     run2("apt-get install -qy --no-install-recommends devscripts")
 
-    pkgs_lists = [build(p) for p in pkgdirs]
+    pkgs_lists = [buildpkg(pd) for pd in pkgdirs]
     for pli in pkgs_lists:
         for p in pli:
-            upload(p)
+            upload(p, args)
+
+def build() -> None:
+    """Run manual build on workstation"""
+    pkgdirs = detect_changed_packages()
+    pkgs_lists = [buildpkg(pd) for pd in pkgdirs]
+    print("Outputs:")
+    for pli in pkgs_lists:
+        for p in pli:
+            print(p)
 
 
 def upload(fi, args) -> None:
@@ -134,7 +170,7 @@ def main():
     elif args.action == "delete_from_bintray":
         delete_bintray_package(args, extra)
     elif args.action == "build":
-        pass
+        build()
 
 
 if __name__ == "__main__":
