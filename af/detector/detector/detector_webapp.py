@@ -134,6 +134,7 @@ def plot_series(conn, ccs, test_names, inputs, start_date, split_asn):
 def genchart():
     params = ("ccs", "test_names", "inputs", "start_date", "split_asn")
     q = {k: (request.query.get(k, "").strip() or None) for k in params}
+    assert q["ccs"], "missing ccs query param"
 
     ccs = [i.strip() for i in q["ccs"].split(",") if i.strip()]
     for cc in ccs:
