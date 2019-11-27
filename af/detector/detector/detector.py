@@ -43,6 +43,7 @@ See README.adoc
 
 from argparse import ArgumentParser
 from collections import namedtuple, deque
+from configparser import ConfigParser
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from site import getsitepackages
@@ -67,12 +68,10 @@ import detector.scoring as scoring
 log = logging.getLogger("detector")
 metrics = setup_metrics(name="detector")
 
-DB_HOST = "hkgmetadb.infra.ooni.io"
 DB_USER = "shovel"
 DB_NAME = "metadb"
 DB_PASSWORD = "yEqgNr2eXvgG255iEBxVeP"  # This is already made public
 
-RO_DB_HOST = "amsmetadb.ooni.nu"
 RO_DB_USER = "amsapi"
 RO_DB_PASSWORD = "b2HUU6gKM19SvXzXJCzpUV"  # This is already made public
 
@@ -474,29 +473,9 @@ def parse_date(d):
     return datetime.strptime(d, "%Y-%m-%d").date()
 
 
-def setup():
-    os.environ["TZ"] = "UTC"
-    global conf
-    ap = ArgumentParser(__doc__)
-    ap.add_argument("--devel", action="store_true", help="Devel mode")
-    ap.add_argument("--webapp", action="store_true", help="Run webapp")
-    ap.add_argument("--start-date", type=lambda d: parse_date(d))
-    ap.add_argument("--db-host", default=DB_HOST, help="Database hostname")
-    ap.add_argument(
-        "--ro-db-host", default=RO_DB_HOST, help="Read-only database hostname"
-    )
-    conf = ap.parse_args()
-    if conf.devel:
-        root = Path(os.getcwd())
-        format = "%(relativeCreated)d %(process)d %(levelname)s %(name)s %(message)s"
-        logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format=format)
-    else:
-        root = Path("/")
-        log.addHandler(JournalHandler(SYSLOG_IDENTIFIER="detector"))
-        log.setLevel(logging.DEBUG)
-
-    conf.conffile = root / "etc/detector.conf"
-    log.info("Using conf file %r", conf.conffile.as_posix())
+def setup_dirs(conf, root):
+    """Setup directories, creating them if needed
+    """
     conf.vardir = root / "var/lib/detector"
     conf.outdir = conf.vardir / "output"
     conf.rssdir = conf.outdir / "rss"
@@ -518,6 +497,39 @@ def setup():
         conf.pickledir,
     ):
         p.mkdir(parents=True, exist_ok=True)
+
+
+def setup():
+    os.environ["TZ"] = "UTC"
+    global conf
+    ap = ArgumentParser(__doc__)
+    ap.add_argument("--devel", action="store_true", help="Devel mode")
+    ap.add_argument("--webapp", action="store_true", help="Run webapp")
+    ap.add_argument("--start-date", type=lambda d: parse_date(d))
+    ap.add_argument("--db-host", default=None, help="Database hostname")
+    ap.add_argument(
+        "--ro-db-host", default=None, help="Read-only database hostname"
+    )
+    conf = ap.parse_args()
+    if conf.devel:
+        format = "%(relativeCreated)d %(process)d %(levelname)s %(name)s %(message)s"
+        logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format=format)
+    else:
+        log.addHandler(JournalHandler(SYSLOG_IDENTIFIER="detector"))
+        log.setLevel(logging.DEBUG)
+
+
+    # Run inside current directory in devel mode
+    root = Path(os.getcwd()) if conf.devel else Path("/")
+    conf.conffile = root / "etc/detector.conf"
+    log.info("Using conf file %r", conf.conffile.as_posix())
+    cp = ConfigParser()
+    with open(conf.conffile) as f:
+        cp.read_file(f)
+        conf.db_host = conf.db_host or cp["DEFAULT"]["db-host"]
+        conf.ro_db_host = conf.ro_db_host or cp["DEFAULT"]["ro-db-host"]
+
+    setup_dirs(conf, root)
 
 
 @metrics.timer("handle_new_measurement")
@@ -852,6 +864,7 @@ def load_country_name_map():
 # TODO: handle input = None both in terms of filename collision and RSS feed
 # and add functional tests
 
+
 def main():
     setup()
     log.info("Starting")
@@ -867,9 +880,7 @@ def main():
         wa.db_conn = ro_conn
         wa.asn_db = load_asn_db()
         log.info("Starting webapp")
-        wa.bottle.TEMPLATE_PATH.insert(
-            0, f"{PKGDIR}/detector/views"
-        )
+        wa.bottle.TEMPLATE_PATH.insert(0, f"{PKGDIR}/detector/views")
         wa.bottle.run(port=8880, debug=conf.devel)
         log.info("Exiting webapp")
         return
