@@ -9,4 +9,4 @@ jobs:
           command: |
             apt-get update -q
             apt-get install -y --no-install-recommends git python3 python3-requests
-            ./.circleci/mkci ci
+            ./.circleci/debops-ci ci
