@@ -29,6 +29,7 @@ import lz4.frame as lz4frame  # debdeps: python3-lz4
 
 try:
     from systemd.journal import JournalHandler  # debdeps: python3-systemd
+
     no_journal_handler = False
 except ImportError:
     # this will be the case on macOS for example
@@ -1046,8 +1047,12 @@ def msm_processor(queue):
                     matches = match_fingerprints(measurement)
                 else:
                     matches = []
+                confirmed = bool(len(matches))
                 scores = score_measurement(measurement, matches)
-                db.upsert_summary(measurement, scores, tid, fn, conf.update)
+                anomaly = (scores.get("blocking_general", 0.0) > 0.5)
+                db.upsert_summary(
+                    measurement, scores, anomaly, confirmed, tid, fn, conf.update
+                )
                 db.trim_old_measurements(conf)
             except Exception as e:
                 log.exception(e)
@@ -1058,8 +1063,8 @@ def shut_down(queue):
     log.info("Shutting down workers")
     [queue.put(None) for n in range(NUM_WORKERS)]
     # FIXME
-    #queue.close()
-    #queue.join_thread()
+    # queue.close()
+    # queue.join_thread()
 
 
 def core():
