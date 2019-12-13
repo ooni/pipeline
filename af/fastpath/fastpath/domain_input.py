@@ -12,10 +12,10 @@ meant to be strict.
 """
 
 from argparse import ArgumentParser
+from os import unlink
 from pathlib import Path
 from subprocess import check_call
-from tempfile import TemporaryDirectory
-from textwrap import dedent
+from tempfile import TemporaryDirectory, mkstemp
 from typing import List, Set, Dict, Tuple, Optional
 import csv
 import logging
@@ -106,30 +106,38 @@ def rebuild_domain_input_table():
     """Load data from input table in large batches
     Validate input and write domain, input, input_no into domain_input
     """
-    insert = "INSERT INTO domain_input (domain, input, input_no) VALUES %s"
+    _, csv_fname = mkstemp()
+
     with db.conn.cursor() as cur:
         log.info("Truncating domain_input")
         cur.execute("TRUNCATE domain_input")
 
         log.info("Fetching from input table")
         cur.execute("SELECT input, input_no FROM input")
-        upload = []
-        while True:
-            # Iterate across chunks of rows
-            rows = cur.fetchmany(1000)
-            if not rows:
-                break
+        with open(csv_fname, "w", newline="") as csv_f:
+            csv_writer = csv.writer(csv_f, delimiter="\t")
+            while True:
+                # Iterate across chunks of rows
+                rows = cur.fetchmany(10000)
+                if not rows:
+                    break
 
-            for input_, input_no in rows:
-                domain = _extract_domain(input_)
-                if domain:
-                    upload.append((domain, input_, input_no))
+                log.debug("Fetched %d rows", len(rows))
+                for input_, input_no in rows:
+                    domain = _extract_domain(input_)
+                    if domain:
+                        csv_writer.writerow([domain, input_, input_no])
 
-        log.info("Filling domain_input with %d rows", len(upload))
-        execute_values(cur, insert, upload)
+            log.info("Filling domain_input with %d bytes", csv_f.tell())
+
+        with open(csv_fname, newline="") as f:
+            cur.copy_from(f, "domain_input", columns=("domain", "input", "input_no"))
+
+        unlink(csv_fname)
 
     db.conn.commit()
     log.info("domain_input is ready")
+
 
 def main():
     logf = "%(relativeCreated)d %(process)d %(levelname)s %(name)s %(message)s"
