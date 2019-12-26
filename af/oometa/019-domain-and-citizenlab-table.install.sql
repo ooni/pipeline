@@ -18,6 +18,8 @@ CREATE INDEX domain_input_domain_idx ON domain_input (domain);
 
 CREATE UNIQUE INDEX domain_input_input_sha256_key on domain_input (digest(input::text, 'sha256'));
 
+CREATE INDEX domain_input_input_no_idx ON domain_input (input_no);
+
 COMMENT ON COLUMN domain_input.domain IS 'FQDN or ipaddr without http and port number';
 
 CREATE TABLE citizenlab (
