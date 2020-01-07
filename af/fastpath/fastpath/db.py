@@ -56,14 +56,23 @@ def setup(conf) -> None:
 
 @metrics.timer("upsert_summary")
 def upsert_summary(
-    msm, scores, anomaly: bool, confirmed: bool, tid, filename, update
+    msm,
+    scores,
+    anomaly: bool,
+    confirmed: bool,
+    msm_failure: bool,
+    tid,
+    filename,
+    update,
 ) -> None:
     """Insert a row in the fastpath_scores table. Overwrite an existing one.
     """
     sql_base_tpl = dedent(
         """\
-    INSERT INTO fastpath (tid, report_id, input, probe_cc, probe_asn, test_name, test_start_time, measurement_start_time, platform, filename, scores, anomaly, confirmed)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    INSERT INTO fastpath (tid, report_id, input, probe_cc, probe_asn, test_name,
+        test_start_time, measurement_start_time, platform, filename, scores,
+        anomaly, confirmed, msm_failure)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT ON CONSTRAINT fastpath_pkey DO
     """
     )
@@ -78,9 +87,10 @@ def upsert_summary(
         test_start_time = excluded.test_start_time,
         measurement_start_time = excluded.measurement_start_time,
         filename = excluded.filename,
+        scores = excluded.scores,
         anomaly = excluded.anomaly,
         confirmed = excluded.confirmed,
-        scores = excluded.scores
+        msm_failure = excluded.msm_failure,
     """
     )
     sql_noupdate = " NOTHING"
@@ -104,7 +114,8 @@ def upsert_summary(
         filename,
         Json(scores, dumps=ujson.dumps),
         anomaly,
-        confirmed
+        confirmed,
+        msm_failure,
     )
 
     # Send notification using pg_notify
