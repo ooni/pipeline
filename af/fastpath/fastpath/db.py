@@ -86,6 +86,7 @@ def upsert_summary(
         test_name = excluded.test_name,
         test_start_time = excluded.test_start_time,
         measurement_start_time = excluded.measurement_start_time,
+        platform = excluded.platform,
         filename = excluded.filename,
         scores = excluded.scores,
         anomaly = excluded.anomaly,
