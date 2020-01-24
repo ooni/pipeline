@@ -191,6 +191,9 @@ class Source:
         # match the real measurement_start_time order
         new_fnames = self.scan_new_files()
         metrics.incr("new_reports", len(new_fnames))
+        if new_fnames:
+            log.info("%d new reports to fetch", len(new_fnames))
+
         for fn in new_fnames:
             for item in self._fetch_measurement(fn):
                 yield item
