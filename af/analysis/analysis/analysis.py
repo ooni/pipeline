@@ -71,6 +71,8 @@ import seaborn as sns  # debdeps: python3-seaborn
 
 from analysis.metrics import setup_metrics  # debdeps: python3-statsd
 
+from analysis.counters_table_updater import counters_table_updater
+
 # Global conf
 conf = Namespace()
 
@@ -1119,6 +1121,9 @@ def main():
     os.makedirs(conf.output_directory, exist_ok=True)
 
     t = Thread(target=monitor_measurement_creation, args=(conf, ))
+    t.start()
+
+    t = Thread(target=counters_table_updater, args=(conf, ))
     t.start()
 
     log.info("Starting generate_slow_query_summary loop")

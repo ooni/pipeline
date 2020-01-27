@@ -1,3 +1,9 @@
+analysis (0.4) unstable; urgency=medium
+
+  * Add counters table updater
+
+ -- Federico Ceratto <federico@debian.org>  Mon, 27 Jan 2020 17:33:25 +0000
+
 analysis (0.3) unstable; urgency=medium
 
   * Fix watchdog
