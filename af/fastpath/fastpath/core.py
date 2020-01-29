@@ -239,7 +239,9 @@ expected_colnames = {
 
 
 @metrics.timer("load_s3_reports")
-def load_s3_reports(day) -> dict:
+def load_s3_reports(day) -> tuple:
+    """Generates measurement tuples
+    """
     # TODO: move this into s3feeder
     t0 = time.time()
     path = conf.s3cachedir / str(day)
@@ -253,12 +255,12 @@ def load_s3_reports(day) -> dict:
                 continue
             files.append(e)
 
+    log.info("Found %d files", len(files))
     fcnt = 0
     for e in sorted(files, key=lambda f: f.name):
         log.debug("Ingesting %s", e.name)
-        fn = os.path.join(path, e.name)
         fcnt += 1
-        for measurement_tup in s3feeder.load_multiple(fn):
+        for measurement_tup in s3feeder.load_multiple(path / e.name):
             yield measurement_tup
 
         remaining = (time.time() - t0) * (len(files) - fcnt) / fcnt
@@ -1013,6 +1015,9 @@ def score_measurement(msm, matches) -> dict:
             return score_psiphon(msm)
         if tn == "tor":
             return score_tor(msm)
+        if tn == "http_requests":
+            # TODO
+            return score_web_connectivity(msm, [])
 
         log.debug("Unsupported test name %s", tn)
         scores = {f"blocking_{l}": 0.0 for l in LOCALITY_VALS}
@@ -1113,7 +1118,7 @@ def msm_processor(queue):
                 log.debug(f"Processing {tid}")
                 fn = generate_filename(tid)
                 writeout_measurement(msm_jstr, fn, conf.update, tid)
-                if measurement.get("test_name", None) == "web_connectivity":
+                if measurement.get("test_name", None) in ("web_connectivity", "http_requests"):
                     matches = match_fingerprints(measurement)
                 else:
                     matches = []

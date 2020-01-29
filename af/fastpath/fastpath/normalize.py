@@ -563,7 +563,8 @@ def generate_report_id(header):
     #   else str(probe_city)
     # )  # u'Reykjav\xedk' in bucket 2014-02-20
     # probe_city = probe_city.decode() #encode("utf-8")
-    value_to_hash += probe_city.encode("utf-8")
+    if probe_city is not None:
+        value_to_hash += probe_city.encode("utf-8")
     report_id += "".join(
         string.ascii_letters[b % len(string.ascii_letters)]
         for b in hashlib.sha512(value_to_hash).digest()

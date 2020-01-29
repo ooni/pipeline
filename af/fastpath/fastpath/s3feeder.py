@@ -15,6 +15,7 @@ AWS_PROFILE=ooni-data-private aws s3 ls s3://ooni-data-private/canned/2019-07-16
 
 """
 
+from pathlib import Path
 import logging
 import os
 import time
@@ -40,11 +41,12 @@ for l in ("urllib3", "botocore", "s3transfer"):
     logging.getLogger(l).setLevel(logging.INFO)
 
 
-def load_multiple(fn, touch=True) -> tuple:
+def load_multiple(path: Path, touch=True) -> tuple:
     """Load contents of cans. Decompress tar archives if found.
     Yields measurements one by one as:
         (string of JSON, None) or (None, msmt dict)
     """
+    fn = path.as_posix()
     if touch:
         os.utime(fn)  # update access time - used for cache cleanup
 
@@ -64,8 +66,8 @@ def load_multiple(fn, touch=True) -> tuple:
                         yield (line, None)
 
                 elif m.name.endswith(".yaml"):
-                    continue  # FIXME
-                    bucket_tstamp = "FIXME"
+                    bucket_tstamp = path.parts[-2]
+                    assert 0, fn
                     for msm in iter_yaml_msmt_normalized(k, bucket_tstamp):
                         yield (None, msm)
 
@@ -76,8 +78,7 @@ def load_multiple(fn, touch=True) -> tuple:
 
     elif fn.endswith(".yaml.lz4"):
         with lz4frame.open(fn) as f:
-            raise Exception("Unsupported format: YAML")
-            bucket_tstamp = "FIXME"
+            bucket_tstamp = path.parts[-2]
             for msm in iter_yaml_msmt_normalized(f, bucket_tstamp):
                 metrics.incr("yaml_normalization")
                 yield (None, msm)

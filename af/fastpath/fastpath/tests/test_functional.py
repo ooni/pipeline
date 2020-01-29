@@ -83,6 +83,7 @@ def cans():
     s3 = boto3.client("s3")
     for fn in to_dload:
         s3fname = fn.as_posix().replace("testdata", "canned")
+        # TODO: move this into s3feeder
         r = s3.list_objects_v2(Bucket=BUCKET_NAME, Prefix=s3fname)
         assert r["KeyCount"] == 1, fn
         assert r["KeyCount"] == 1, r
@@ -102,6 +103,7 @@ def s3msmts(test_name, start_date=date(2018, 1, 1), end_date=date(2019, 11, 4)):
     """Fetches cans from S3 and iterates over measurements.
     Detect broken dloads.
     """
+    # TODO: move this into s3feeder
     boto3.setup_default_session(profile_name="ooni-data")
     s3 = boto3.client("s3")
     can_date = start_date
@@ -130,7 +132,7 @@ def s3msmts(test_name, start_date=date(2018, 1, 1), end_date=date(2019, 11, 4)):
             assert s3size == can_local_file.stat().st_size
 
         log.debug("Loading %s", s3fname)
-        for msm_jstr, msm in s3feeder.load_multiple(can_local_file.as_posix(), touch=False):
+        for msm_jstr, msm in s3feeder.load_multiple(can_local_file, touch=False):
             msm = msm or ujson.loads(msm_jstr)
             if msm.get("report_id", None) is None:
                 # Missing or empty report_id
@@ -140,6 +142,8 @@ def s3msmts(test_name, start_date=date(2018, 1, 1), end_date=date(2019, 11, 4)):
 
 
 def list_cans_on_s3_for_a_day(day, filter=None, bysize=False):
+    """Wrapper for s3feeder.list_cans_on_s3_for_a_day
+    """
     s3 = s3feeder.create_s3_client()
     fns = s3feeder.list_cans_on_s3_for_a_day(s3, day)
     if bysize:
@@ -200,7 +204,7 @@ def print_msm(msm):
 
 def load_can(can):
     cnt = 0
-    for msm_jstr, msm in s3feeder.load_multiple(can.as_posix(), touch=False):
+    for msm_jstr, msm in s3feeder.load_multiple(can, touch=False):
         msm = msm or ujson.loads(msm_jstr)
         if msm.get("report_id", None) is None:
             # Missing or empty report_id
@@ -783,3 +787,25 @@ def test_score_psiphon(cans):
 
 
 # See test_score_tor() in test_unit.py
+
+# TODO: use s3feeder.fetch_cans_for_a_day_with_cache everywhere
+
+def test_yaml_ingestion():
+    day = "2016-05-13"
+    s3feeder.fetch_cans_for_a_day_with_cache(fp.conf, day)
+    cnt = 0
+    for msm_jstr, msm in fp.load_s3_reports(day):
+        cnt += 1
+        if msm is None:
+            msm = ujson.loads(msm_jstr)
+
+        matches = fp.match_fingerprints(msm)
+        if matches:
+            print(cnt, matches)
+        scores = fp.score_measurement(msm, matches)
+
+        if cnt == 6:
+            assert scores["blocking_general"] == 0.007408863825261625
+
+        elif cnt > 100:
+            return
