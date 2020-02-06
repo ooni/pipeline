@@ -3,10 +3,16 @@
 #
 
 from datetime import datetime
+from itertools import groupby
+import functools
+import hashlib
 import logging
 import re
-import hashlib
+import string
 import uuid
+
+import yaml
+from yaml import CLoader
 
 import lz4.frame as lz4frame  # debdeps: python3-lz4
 
@@ -129,9 +135,7 @@ regexps = {
 }
 
 
-## Simhash generation
-
-from itertools import groupby
+# # Simhash generation
 
 simhash_re = re.compile(r"[\w\u4e00-\u9fcc]+")
 
@@ -156,7 +160,7 @@ def gen_simhash(s):
     return ans
 
 
-### Normalize entries across format versions ###
+# # # Normalize entries across format versions
 
 
 def nest_test_keys(entry):
@@ -486,9 +490,6 @@ def normalize_entry(entry, bucket_date, perma_fname, esha):
 
 ### Stream entries from YAML.lz4 files ####
 
-import yaml
-from yaml import CLoader
-
 
 class BlobSlicerError(RuntimeError):
     pass
@@ -500,10 +501,6 @@ class BrokenFrameError(BlobSlicerError):
 
 class TruncatedReportError(BlobSlicerError):
     pass
-
-
-import functools
-import string
 
 
 def stream_yaml_blobs(fd):
@@ -518,11 +515,11 @@ def stream_yaml_blobs(fd):
         head, blob = b"", head + blob
         start = 0
         while head == b"":
-            prefix = blob[start : start + 4]
+            prefix = blob[start:start + 4]
             if prefix == b"---\n":  # ordinary preamble
                 end = blob.find(b"\n...\n", start)
                 if end != -1:
-                    yield bloboff + start, blob[start : end + 5]
+                    yield bloboff + start, blob[start:end + 5]
                     start = end + 5
                 else:
                     head = blob[start:]
@@ -572,6 +569,7 @@ def generate_report_id(header):
     return report_id
 
 
+# TODO: unused: remove?
 def iter_yaml_lz4_reports(fn):
     """Iterate YAML reports from a lz4 file
     """
