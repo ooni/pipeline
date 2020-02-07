@@ -4,6 +4,12 @@ fastpath (0.16) unstable; urgency=medium
 
  -- Federico Ceratto <federico@debian.org>  Fri, 14 Feb 2020 16:59:15 +0000
 
+fastpath (0.15) unstable; urgency=medium
+
+  * Enable YAML normalization
+
+ -- Federico Ceratto <federico@debian.org>  Fri, 07 Feb 2020 11:58:27 +0000
+
 fastpath (0.14) unstable; urgency=medium
 
   * Score Tor
