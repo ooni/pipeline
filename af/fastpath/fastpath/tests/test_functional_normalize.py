@@ -58,8 +58,10 @@ def cans():
     if not to_dload:
         return _cans
 
-    bname = "ooni-data-private"
-    boto3.setup_default_session(profile_name="ooni-data-private")
+    # TODO: move this into s3feeder, deduplicate code between
+    # s3feeder, test_functional and here
+    bname = "ooni-data"
+    boto3.setup_default_session(profile_name="ooni-data")
     s3 = boto3.client("s3")
     for fn in to_dload:
         s3fname = fn.as_posix().replace("testdata", "canned")
