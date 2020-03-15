@@ -1,3 +1,9 @@
+fastpath (0.30) UNRELEASED; urgency=medium
+
+  * Clickhouse support
+
+ -- Federico Ceratto <federico@debian.org>  Sat, 04 Jul 2020 20:56:33 +0100
+
 fastpath (0.29) unstable; urgency=medium
 
   * Trim S3 cache immediately

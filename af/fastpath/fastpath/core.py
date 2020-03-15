@@ -54,7 +54,7 @@ import fastpath.utils
 
 LOCALITY_VALS = ("general", "global", "country", "isp", "local")
 
-NUM_WORKERS = 15
+NUM_WORKERS = mp.cpu_count() * 4 - 1
 
 log = logging.getLogger("fastpath")
 metrics = setup_metrics(name="fastpath")
@@ -103,6 +103,7 @@ def setup():
         help="Update summaries and files instead of logging an error",
     )
     ap.add_argument("--interact", action="store_true", help="Interactive mode")
+    ap.add_argument("--clickhouse", action="store_true", help="Use clickhouse")
     ap.add_argument(
         "--stop-after", type=int, help="Stop after feeding N measurements", default=None
     )
@@ -839,7 +840,7 @@ def score_web_connectivity(msm, matches) -> dict:
     Returns a scores dict
     """
     scores = {f"blocking_{l}": 0.0 for l in LOCALITY_VALS}  # type: Dict[str, Any]
-    tk = msm["test_keys"]
+    tk = msm["test_keys"] or {}
 
     for m in matches:
         l = "blocking_" + m["locality"]
@@ -1260,6 +1261,8 @@ def msm_processor(queue):
     """
     if conf.no_write_to_db:
         log.warning("not writing to database")
+    elif conf.clickhouse:
+        db.ch_setup(conf)
     else:
         db.setup(conf)
 
@@ -1298,7 +1301,18 @@ def msm_processor(queue):
                     log.debug(
                         f"Storing {tid} {rid} {inp} A{int(anomaly)} F{int(failure)} C{int(confirmed)}"
                     )
-                if not conf.no_write_to_db:
+                if conf.clickhouse and not conf.no_write_to_db:
+                    db.ch_upsert_summary(
+                        measurement,
+                        scores,
+                        anomaly,
+                        confirmed,
+                        failure,
+                        tid,
+                        fn,
+                        conf.update,
+                    )
+                elif not conf.no_write_to_db:
                     db.upsert_summary(
                         measurement,
                         scores,
