@@ -370,6 +370,30 @@ fingerprints = {
             "locality": "isp"
         }
     ],
+    "LB": [
+        # https://explorer.ooni.org/measurement/20200102T135817Z_AS43824_cQ1edG5AUuRTpEM0kyKmOM8Iu1ILVVMRkv7YfwhPnIn12LIlH5?input=https%3A%2F%2Fwww.planetromeo.com%2F
+        {
+            "body_match": "<a>قد حجب الموقع بناء لأمر القضاء اللبناني</a>",
+            "locality": "country"
+        },
+        # https://explorer.ooni.org/measurement/20171016T191353Z_AS38999_zgWiQoxayi5TPwko0AWOTQhbU5RcJCsf1yiXy6ZydXkTvVKwbr?input=http%3A%2F%2Fwww.partypoker.com
+        {
+            "header_name": "Location",
+            "header_prefix": "http://www.touch.com.lb/bylaw/site-denied.htm",
+            "locality": "isp",
+        },
+        # https://explorer.ooni.org/measurement/20180514T101713Z_AS31126_MofXs71WKKC8rZJEu6GiXz7aLdDxoVcXCSbpediADjzA1MtDwq?input=http%3A%2F%2Fwww.bet365.com%2Fen%2F
+        {
+            "body_match": "Your system policy has denied access to the requested URL.",
+            "locality": "isp"
+        },
+        # https://explorer.ooni.org/measurement/20180627T111929Z_AS31126_hoKyQ63k4A9PL0HCxVKYMX0DYDF5cELpudWQ63QZnfqJLrDjPd?input=http%3A%2F%2Fwww.bet365.com%2Fen%2F
+        {
+            "body_match": "قد حجب الموقع بناء لأمر القضاء اللبناني",
+            "locality": "country"
+        },
+
+    ],
     "MX": [
         # https://github.com/ooni/pipeline/issues/159
         # https://explorer.ooni.org/measurement/20190306T161639Z_AS22908_1iCBIVT3AGu4mDvEtpl0ECfxp1oSw8UYXSg82JFQ1gOIqOvw8y?input=http:%2F%2Fwww.pornhub.com%2F
