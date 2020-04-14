@@ -94,6 +94,8 @@ def _extract_domain(url: str) -> Optional[str]:
     if m:
         return m.group(2)
 
+    return None
+
 
 @metrics.timer("fetch_citizen_lab_lists")
 def fetch_citizen_lab_lists() -> List[Tuple[str, str, str, str, int]]:
