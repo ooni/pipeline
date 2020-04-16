@@ -13,6 +13,7 @@ case "$1" in
         if [ ! -f /etc/nginx/sites-enabled/analysis.conf ]
         then
           ln -s -t /etc/nginx/sites-enabled/ /etc/nginx/sites-available/analysis.conf
+          ln -s -t /etc/nginx/sites-enabled/ /etc/nginx/sites-available/analysis_url_prioritization.conf
           nginx -t
           systemctl reload nginx
         fi
