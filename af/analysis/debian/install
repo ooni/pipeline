@@ -1,1 +1,2 @@
 debian/nginx/analysis.conf /etc/nginx/sites-available/
+debian/nginx/analysis_url_prioritization.conf /etc/nginx/sites-available/
