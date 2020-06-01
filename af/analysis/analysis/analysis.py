@@ -67,6 +67,7 @@ import psycopg2  # debdeps: python3-psycopg2
 from psycopg2.extras import RealDictCursor
 
 import matplotlib  # debdeps: python3-matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns  # debdeps: python3-seaborn
@@ -93,11 +94,19 @@ metrics = setup_metrics(name="analysis")
 node_exporter_path = "/run/nodeexp/analysis.prom"
 
 
+def setup_database_connection(c):
+    return psycopg2.connect(
+        dbname=c["dbname"],
+        user=c["dbuser"],
+        host=c["dbhost"],
+        password=c["dbpassword"],
+        port=c.get("dbport", 5432),
+    )
+
+
 @contextmanager
 def database_connection(c):
-    conn = psycopg2.connect(
-        dbname=c["dbname"], user=c["dbuser"], host=c["dbhost"], password=c["dbpassword"]
-    )
+    conn = setup_database_connection(c)
     try:
         yield conn
     finally:
@@ -105,10 +114,7 @@ def database_connection(c):
 
 
 def setup_database_connections(c):
-    conn = psycopg2.connect(
-        dbname=c["dbname"], user=c["dbuser"], host=c["dbhost"], password=c["dbpassword"]
-    )
-
+    conn = setup_database_connection(c)
     dbengine = create_engine("postgresql+psycopg2://", creator=lambda: conn)
     return conn, dbengine
 
@@ -121,14 +127,14 @@ def gen_table(name, df, cmap="RdYlGn"):
     # df.style.bar(subset=['A', 'B'], align='mid', color=['#d65f5f', '#5fba7d'])
     html = tb.render()
     fn = os.path.join(conf.output_directory, name + ".html")
-    log.info("Rendering", fn)
+    log.info(f"Rendering to {fn}")
     with open(fn, "w") as f:
         f.write(html)
 
 
 def save(name, plt):
     fn = os.path.join(conf.output_directory, name + ".png")
-    log.info("Rendering", fn)
+    log.info(f"Rendering to {fn}")
     plt.get_figure().savefig(fn)
 
 
@@ -139,7 +145,7 @@ def gen_plot(name, df, *a, **kw):
 
 def heatmap(name, *a, **kw):
     fn = os.path.join(conf.output_directory, name + ".png")
-    log.info("Rendering", fn)
+    log.info(f"Rendering to {fn}")
     h = sns.heatmap(*a, **kw)
     h.get_figure().savefig(fn)
 
@@ -478,10 +484,13 @@ def coverage_variance():
     ## Total number of datapoints and variance across countries per day
 
 
+# TODO: drop interesting_inputs table
+
+
 @metrics.timer("summarize_core_density")
 def summarize_core_density():
     ## Core density
-    ## Measure coverage of interesting_inputs on well-monitored countries
+    ## Measure coverage of citizenlab inputs on well-monitored countries
     core = query(
         """
     SELECT
@@ -533,6 +542,90 @@ def summarize_core_density():
     c5 = core[core["msm_count"] > 5]["target"].count() / area
     log.info("Coverage-5: cells with at least 5 datapoints", c5)
     metrics.gauge("coverage_1_day_5dp", c1)
+
+
+@metrics.timer("plot_msmt_count_per_platform_over_time")
+def plot_msmt_count_per_platform_over_time(conn):
+    log.info("COV: plot_msmt_count_per_platform_over_time")
+    sql = """
+        SELECT date_trunc('day', measurement_start_time) AS day, platform, COUNT(*) AS msm_count
+        FROM fastpath
+        WHERE measurement_start_time >= CURRENT_DATE - interval '60 days'
+            AND measurement_start_time < CURRENT_DATE
+        GROUP BY day, platform
+        ORDER BY day, platform;
+    """
+    q = pd.read_sql_query(sql, conn)
+    p = q.pivot_table(index="day", columns="platform", values="msm_count", fill_value=0)
+    gen_plot("msmt_count_per_platform_over_time", p)
+
+
+@metrics.timer("plot_coverage_per_platform")
+def plot_coverage_per_platform(conn):
+    """Measure how much each platform contributes to measurements
+    """
+    log.info("COV: plot_coverage_per_platform")
+    sql = "SELECT UPPER(cc), COUNT(*) from citizenlab GROUP BY cc"
+    with conn.cursor() as cur:
+        cur.execute(sql)
+        baseline = dict(cur.fetchall())  # CC -> count
+
+    # The inner query returns *one* line for each (platform, probe_cc, input)
+    # that has 1 or more msmt. If an input is tested more than once in the time
+    # period in a given CC we treat it as 1.
+    sql = """
+        SELECT platform, probe_cc, count(*)
+        FROM (
+            SELECT platform, probe_cc
+            FROM fastpath
+            WHERE (probe_cc, input) IN (SELECT UPPER(cc), url FROM citizenlab)
+                AND measurement_start_time > CURRENT_DATE - interval '1 days'
+                AND measurement_start_time < CURRENT_DATE
+                AND input IS NOT null
+            GROUP BY probe_cc, input, platform
+            ORDER BY probe_cc, platform) sq
+        GROUP BY sq.platform, sq.probe_cc
+        ORDER BY sq.probe_cc, sq.platform;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql)
+        x = []
+        for platform, probe_cc, count in cur:
+            if probe_cc not in baseline:
+                continue
+            x.append((platform, probe_cc, count / baseline[probe_cc]))
+
+    cov = pd.DataFrame(x, columns=["platform", "probe_cc", "ratio"])
+    cov = cov.pivot_table(
+        index="probe_cc", columns="platform", values="ratio", fill_value=0
+    )
+    gen_table("coverage_per_platform", cov)
+
+
+def coverage_generator(conf):
+    """Generate hourly statistics on coverage
+    """
+    log.info("COV: Started monitor_measurement_creation thread")
+    while True:
+        try:
+            conn, dbengine = setup_database_connections(conf.standby)
+        except Exception as e:
+            log.error(e, exc_info=True)
+            time.sleep(30)
+            continue
+
+        try:
+            plot_coverage_per_platform(conn)
+            plot_msmt_count_per_platform_over_time(conn)
+            log.info("COV: done. Sleeping")
+
+        except Exception as e:
+            log.error(e, exc_info=True)
+
+        finally:
+            conn.close()
+
+        time.sleep(3600)
 
 
 def summarize_total_density_UNUSED():
@@ -1260,12 +1353,16 @@ def main():
     t = Thread(target=monitor_measurement_creation, args=(conf,))
     t.start()
 
-    Thread(target=domain_input_update_runner).start()
+    t = Thread(target=domain_input_update_runner)
+    t.start()
 
     t = Thread(target=counters_table_updater, args=(conf,))
     t.start()
 
     t = Thread(target=url_prioritization_updater, args=(conf,))
+    t.start()
+
+    t = Thread(target=coverage_generator, args=(conf,))
     t.start()
 
     log.info("Starting generate_slow_query_summary loop")
