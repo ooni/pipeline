@@ -488,7 +488,7 @@ def coverage_variance():
 
 
 @metrics.timer("summarize_core_density")
-def summarize_core_density():
+def summarize_core_density_UNUSED():
     ## Core density
     ## Measure coverage of citizenlab inputs on well-monitored countries
     core = query(
@@ -565,10 +565,14 @@ def plot_coverage_per_platform(conn):
     """Measure how much each platform contributes to measurements
     """
     log.info("COV: plot_coverage_per_platform")
+    # Consider only inputs that are listed on citizenlab
     sql = "SELECT UPPER(cc), COUNT(*) from citizenlab GROUP BY cc"
     with conn.cursor() as cur:
         cur.execute(sql)
         baseline = dict(cur.fetchall())  # CC -> count
+    zz_cnt = baseline.pop("ZZ")
+    for cc in baseline:
+        baseline[cc] += zz_cnt
 
     # The inner query returns *one* line for each (platform, probe_cc, input)
     # that has 1 or more msmt. If an input is tested more than once in the time
@@ -576,14 +580,19 @@ def plot_coverage_per_platform(conn):
     sql = """
         SELECT platform, probe_cc, count(*)
         FROM (
-            SELECT platform, probe_cc
-            FROM fastpath
-            WHERE (probe_cc, input) IN (SELECT UPPER(cc), url FROM citizenlab)
-                AND measurement_start_time > CURRENT_DATE - interval '1 days'
-                AND measurement_start_time < CURRENT_DATE
-                AND input IS NOT null
-            GROUP BY probe_cc, input, platform
-            ORDER BY probe_cc, platform) sq
+          SELECT platform, probe_cc
+          FROM fastpath
+          WHERE (
+              (probe_cc, input) IN (SELECT UPPER(cc), url FROM citizenlab)
+              OR
+              input IN (SELECT url FROM citizenlab WHERE cc = 'ZZ')
+            )
+            AND measurement_start_time > NOW() - interval '1 days'
+            AND measurement_start_time < NOW()
+            AND test_name = 'web_connectivity'
+            AND input IS NOT null
+          GROUP BY probe_cc, input, platform
+          ORDER BY probe_cc, platform) sq
         GROUP BY sq.platform, sq.probe_cc
         ORDER BY sq.probe_cc, sq.platform;
     """
@@ -591,7 +600,7 @@ def plot_coverage_per_platform(conn):
         cur.execute(sql)
         x = []
         for platform, probe_cc, count in cur:
-            if probe_cc not in baseline:
+            if probe_cc not in baseline or probe_cc == "ZZ":
                 continue
             x.append((platform, probe_cc, count / baseline[probe_cc]))
 
@@ -599,11 +608,12 @@ def plot_coverage_per_platform(conn):
     cov = cov.pivot_table(
         index="probe_cc", columns="platform", values="ratio", fill_value=0
     )
+    pd.set_option("display.precision", 1)
     gen_table("coverage_per_platform", cov)
 
 
 def coverage_generator(conf):
-    """Generate hourly statistics on coverage
+    """Generate statistics on coverage
     """
     log.info("COV: Started monitor_measurement_creation thread")
     while True:
@@ -625,7 +635,7 @@ def coverage_generator(conf):
         finally:
             conn.close()
 
-        time.sleep(3600)
+        time.sleep(3600 * 24)
 
 
 def summarize_total_density_UNUSED():
