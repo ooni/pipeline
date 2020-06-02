@@ -585,6 +585,8 @@ def plot_coverage_per_platform(conn):
     for cc in baseline:
         baseline[cc] += zz_cnt
 
+    baseline["ZZ"] = zz_cnt  # put back the initial value
+
     # The inner query returns *one* line for each (platform, probe_cc, input)
     # that has 1 or more msmt. If an input is tested more than once in the time
     # period in a given CC we treat it as 1.
@@ -611,7 +613,7 @@ def plot_coverage_per_platform(conn):
         cur.execute(sql)
         x = []
         for platform, probe_cc, count in cur:
-            if probe_cc not in baseline or probe_cc == "ZZ":
+            if probe_cc not in baseline:
                 continue
             x.append((platform, probe_cc, count / baseline[probe_cc]))
 
