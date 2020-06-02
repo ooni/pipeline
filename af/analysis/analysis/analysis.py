@@ -120,16 +120,27 @@ def setup_database_connections(c):
 
 
 def gen_table(name, df, cmap="RdYlGn"):
+    """Render dataframe into an HTML table and save it to file.
+    Create a timestamped file <name>.<ts>.html and a symlink to it.
+    """
     if cmap is None:
         tb = df.style
     else:
         tb = df.style.background_gradient(cmap=cmap)
     # df.style.bar(subset=['A', 'B'], align='mid', color=['#d65f5f', '#5fba7d'])
     html = tb.render()
-    fn = os.path.join(conf.output_directory, name + ".html")
-    log.info(f"Rendering to {fn}")
-    with open(fn, "w") as f:
+    ts = datetime.utcnow().strftime("%Y%m%d-%H%M")
+    outf = conf.output_directory / f"{name}.{ts}.html"
+    log.info(f"Rendering to {outf}")
+    with outf.open("w") as f:
         f.write(html)
+
+    symlink = conf.output_directory / f"{name}.html"
+    try:
+        symlink.unlink()  # Atomic symlinking not supported
+    except:
+        pass
+    symlink.symlink_to(f"{name}.{ts}.html")  # (Absolute path not supported)
 
 
 def save(name, plt):
