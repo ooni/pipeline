@@ -61,7 +61,7 @@ except ImportError:
 
 from bottle import template  # debdeps: python3-bottle
 from sqlalchemy import create_engine  # debdeps: python3-sqlalchemy-ext
-import pandas as pd  # debdeps: python3-pandas
+import pandas as pd  # debdeps: python3-pandas python3-jinja2
 import prometheus_client as prom  # debdeps: python3-prometheus-client
 import psycopg2  # debdeps: python3-psycopg2
 from psycopg2.extras import RealDictCursor
