@@ -13,11 +13,8 @@ Inputs:
         country codes are in the `cc` column, lowercase, with the exception of ZZ
 
 Outputs:
-    Files in /var/lib/analysis
-    Node exporter / prometheus metrics
-    Dedicated unlogged database tables and charts
-        tables:
-            currently_blocked
+    API
+    Statsd metrics
 
 Special country code values:
     ZZ: unknown
@@ -32,6 +29,7 @@ import random
 import time
 
 from systemd.journal import JournalHandler  # debdeps: python3-systemd
+import statsd  # debdeps: python3-statsd
 
 from bottle import route
 import bottle
@@ -41,13 +39,18 @@ import psycopg2
 
 conf = None
 test_items = {}
-last_update_time = 0
+next_update_time = None
 
 log = logging.getLogger("prio")
 log.addHandler(JournalHandler(SYSLOG_IDENTIFIER="prio"))
+log.setLevel(logging.DEBUG)
+
+
+metrics = statsd.StatsClient("localhost", 8125, prefix="prio")
 
 
 def connect_db(c):
+    log.info("Connecting to %s %d", c.dbhost, c.dbport)
     conn = psycopg2.connect(
         dbname=c.dbname,
         user=c.dbuser,
@@ -58,15 +61,15 @@ def connect_db(c):
     return conn
 
 
-# @metrics.timer("update_url_prioritization")
+@metrics.timer("update_url_prioritization")
 def update_url_prioritization():
-    """
+    """Fetch URL prioritization from database and update lookup dict
     """
     log.info("Started update_url_prioritization")
     conn = connect_db(conf)
     cur = conn.cursor(cursor_factory=RealDictCursor)
 
-    log.info("Regenerating URL prioritization file")
+    log.info("Regenerating URL prioritization data")
     sql = """SELECT priority, domain, url, cc, category_code FROM citizenlab"""
     cur.execute(sql)
     entries = list(cur.fetchall())
@@ -82,13 +85,18 @@ def update_url_prioritization():
         ccode = e["category_code"]
         entries_by_country[country].setdefault(ccode, []).append(e)
 
-    # merge ZZ into each country
-    zz = entries_by_country.pop("ZZ")
+    # merge ZZ into each country: in this way, when we look for entries for a
+    # given cc we'll find both global and country-specific URLs
+    zz = entries_by_country["ZZ"]
     for ccode, country_dict in entries_by_country.items():
         for category_code, test_items in zz.items():
             country_dict.setdefault(category_code, []).extend(test_items)
 
-    log.info("Update done")
+    log.info(
+        "Update done: %d countries, %d global URLs",
+        len(entries_by_country) - 1,
+        len(entries_by_country["ZZ"]),
+    )
     return entries_by_country
 
 
@@ -113,11 +121,12 @@ def algo_chao(s: List, k: int) -> List:
     return r
 
 
+@metrics.timer("generate_test_list")
 def generate_test_list(country_code: str, category_codes: str, limit: int):
-    global test_items, last_update_time
+    global test_items, next_update_time
 
-    if last_update_time < time.time() - 100:  # conf.refresh_interval:
-        last_update_time = time.time()
+    if next_update_time < time.time():
+        next_update_time = time.time() + float(conf.refresh_interval_s)
         try:
             test_items = update_url_prioritization()
         except Exception as e:
@@ -127,6 +136,8 @@ def generate_test_list(country_code: str, category_codes: str, limit: int):
 
     if category_codes:
         category_codes = [c.strip().upper() for c in category_codes.split(",")]
+        for cat in category_codes:
+            metrics.incr(f"category_code_requested[category={cat}]")
     else:
         category_codes = candidates_d.keys()
 
@@ -134,8 +145,6 @@ def generate_test_list(country_code: str, category_codes: str, limit: int):
     for ccode in category_codes:
         s = candidates_d.get(ccode, [])
         candidates.extend(s)
-
-    log.info("%d candidates", len(candidates))
 
     if limit == -1:
         limit = 100
@@ -151,6 +160,9 @@ def generate_test_list(country_code: str, category_codes: str, limit: int):
                 "country_code": "XX" if entry["cc"] == "ZZ" else entry["cc"],
             }
         )
+    metrics.incr("total_urls_served", count=len(out))
+    metrics.incr(f"country_code_requested[cc={country_code}]")
+    log.info("Serving %d URLs", len(out))
     return out
 
 
@@ -160,9 +172,12 @@ def list_urls():
     https://orchestrate.ooni.io/api/v1/test-list/urls?country_code=IT
     """
     try:
-        country_code = bottle.request.query.country_code.upper() or "ZZ"
-        category_codes = bottle.request.query.category_code
-        limit = int(bottle.request.query.limit or -1)
+        q = bottle.request.query
+        # look for country_code or probe_cc or default to "ZZ" which
+        # represents the global list
+        country_code = q.country_code.upper() or q.probe_cc.upper() or "ZZ"
+        category_codes = q.category_codes
+        limit = int(q.limit or -1)
         test_items = generate_test_list(country_code, category_codes, limit)
         out = {
             "metadata": {
@@ -181,13 +196,18 @@ def list_urls():
 
 
 def main():
-    global conf
+    global conf, test_items, next_update_time
     conffile = "/etc/ooni/prio.conf"
     cp = ConfigParser()
     with open(conffile) as f:
         cp.read_file(f)
     d = cp.defaults()  # parsed values from DEFAULT section
     conf = namedtuple("Conf", d.keys())(*d.values())
+    log.info("Refresh interval: %s", conf.refresh_interval_s)
+
+    test_items = update_url_prioritization()
+    next_update_time = time.time() + float(conf.refresh_interval_s)
+
     bottle.run(host="localhost", port=conf.apiport)
 
 

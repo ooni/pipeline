@@ -10,7 +10,7 @@ Type=simple
 RestartSec=2s
 WorkingDirectory=/var/lib/prio
 
-WatchdogSec=600s
+#WatchdogSec=600s
 
 User=prio
 Group=prio
