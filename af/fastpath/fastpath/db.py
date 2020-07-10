@@ -167,6 +167,7 @@ def _ch_ping():
 
 
 def _ch_create_table_fastpath():
+    # _ch_send_query("POST", "DROP TABLE fastpath")
     sql = """
     CREATE TABLE IF NOT EXISTS fastpath (
         "tid" String,
@@ -180,9 +181,17 @@ def _ch_create_table_fastpath():
         "platform" String,
         "filename" String,
         "scores" String,
-        anomaly Int8,
-        confirmed Int8,
-        msm_failure Int8
+        "anomaly" Int8,
+        "confirmed" Int8,
+        "msm_failure" Int8,
+        "control_failure" String,
+        "is_ssl_expected" Int8,
+        "page_len" Int32,
+        "page_len_ratio" Float32,
+        "server_cc" String,
+        "server_asn" Int8,
+        "server_as_name" String
+
     ) ENGINE = ReplacingMergeTree()
     ORDER BY (measurement_start_time, report_id, input)
     """
@@ -191,7 +200,7 @@ def _ch_create_table_fastpath():
 
 
 def ch_setup(conf) -> None:
-    global conn, _autocommit_conn
+    global conn
     conn = http.client.HTTPConnection(f"{CH_DB_HOST}:{CH_DB_PORT}")
 
     # if conf.db_uri:
@@ -236,6 +245,7 @@ def ch_upsert_summary(
     tid,
     filename,
     update,
+    **features,
 ) -> None:
     """Insert a row in the fastpath table. Overwrite an existing one.
     """
@@ -243,22 +253,17 @@ def ch_upsert_summary(
         """\
     INSERT INTO fastpath (tid, report_id, input, probe_cc, probe_asn, test_name,
         test_start_time, measurement_start_time, platform, filename, scores,
-        anomaly, confirmed, msm_failure)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    ON CONFLICT ON CONSTRAINT fastpath_pkey DO
+        anomaly, confirmed, msm_failure,
+        control_failure, is_ssl_expected, page_len, page_len_ratio,
+        server_cc, server_asn, server_as_name
+    )
+    VALUES ('%s', '%s', '%s', '%s', %d, '%s', '%s', '%s', '%s', '%s', '%s',
+        %d, %d, %d,
+        '%s', %d, %d, %f,
+        '%s', %d, '%s'
+    )
     """
     )
-    sql_base_tpl = dedent(
-        """\
-    INSERT INTO fastpath (tid, report_id, input, probe_cc, probe_asn, test_name,
-        test_start_time, measurement_start_time, platform, filename, scores,
-        anomaly, confirmed, msm_failure)
-    VALUES ('%s', '%s', '%s', '%s', %d, '%s', '%s', '%s', '%s', '%s', '%s', %d, %d, %d)
-    """
-    )
-    sql_noupdate = " NOTHING"
-
-    tpl = sql_base_tpl + (sql_update if update else sql_noupdate)
 
     asn = int(msm["probe_asn"][2:])  # AS123
     platform = "unset"
@@ -279,6 +284,13 @@ def ch_upsert_summary(
         anomaly,
         confirmed,
         msm_failure,
+        features.get("control_failure", None),
+        features.get("is_ssl_expected", None) or 2,
+        features.get("page_len", None) or 0,
+        features.get("page_len_ratio", None) or 0,
+        features.get("server_cc", None),
+        features.get("server_asn", 0) or 0,
+        features.get("server_as_name", None),
     )
     sql = sql_base_tpl % args
     result = _ch_send_query("POST", sql)

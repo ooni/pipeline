@@ -15,7 +15,7 @@ See README.adoc
 from argparse import ArgumentParser, Namespace
 from base64 import b64decode
 from configparser import ConfigParser
-from datetime import date, datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Iterator, Dict, Any
@@ -26,8 +26,9 @@ import os
 import sys
 import time
 
-import ujson  # debdeps: python3-ujson
+import maxminddb as mmdb  # debdeps: python3-maxminddb
 import lz4.frame as lz4frame  # debdeps: python3-lz4
+import ujson  # debdeps: python3-ujson
 
 try:
     from systemd.journal import JournalHandler  # debdeps: python3-systemd
@@ -61,6 +62,8 @@ metrics = setup_metrics(name="fastpath")
 
 conf = Namespace()
 fingerprints = None
+geoloc_asn = None  # ASN and org name
+geoloc_cc = None  # Country code
 
 
 def parse_date(d):
@@ -76,6 +79,7 @@ def setup_dirs(conf, root):
     conf.dfdir = conf.vardir / "dataframes"
     conf.outdir = conf.vardir / "output"
     conf.msmtdir = conf.outdir / "measurements"
+    conf.geodir = conf.vardir / "geoloc"
     for p in (
         conf.vardir,
         conf.cachedir,
@@ -83,8 +87,31 @@ def setup_dirs(conf, root):
         conf.dfdir,
         conf.outdir,
         conf.msmtdir,
+        conf.geodir,
     ):
         p.mkdir(parents=True, exist_ok=True)
+
+
+def setup_geoloc(conf):
+    """Setup geolocation"""
+    global geoloc_cc, geoloc_asn
+    # TODO: download files as needed
+    # TODO: update files over time and download older files as needed
+    # https://github.com/ooni/probe-assets/releases/download/20200619115947/asn.mmdb.gz
+    # https://github.com/ooni/probe-assets/releases/download/20200619115947/country.mmdb.gz
+    log.info("Loading geolocation databases")
+
+    f = conf.geodir / "asn.mmdb"
+    geoloc_asn = mmdb.open_database(f.as_posix(), mmdb.MODE_MEMORY)
+    log.info(geoloc_asn.metadata().__dict__)
+    assert geoloc_asn.get("8.8.8.8")["autonomous_system_number"] == 15169
+
+    f = conf.geodir / "country.mmdb"
+    geoloc_cc = mmdb.open_database(f.as_posix(), mmdb.MODE_MEMORY)
+    log.info(geoloc_cc.metadata().__dict__)
+    assert geoloc_cc.get("8.8.8.8")["country"]["iso_code"] == "US"
+
+    log.info("Geolocation databases ready")
 
 
 def setup():
@@ -107,12 +134,19 @@ def setup():
     ap.add_argument(
         "--stop-after", type=int, help="Stop after feeding N measurements", default=None
     )
-    ap.add_argument("--no-write-msmt", action="store_true",
-                    help="Do not write measurement on disk")
-    ap.add_argument("--no-write-to-db", action="store_true",
-                    help="Do not insert measurement in database")
-    ap.add_argument("--keep-s3-cache", action="store_true",
-                    help="Keep files downloaded from S3 in the local cache")
+    ap.add_argument(
+        "--no-write-msmt", action="store_true", help="Do not write measurement on disk"
+    )
+    ap.add_argument(
+        "--no-write-to-db",
+        action="store_true",
+        help="Do not insert measurement in database",
+    )
+    ap.add_argument(
+        "--keep-s3-cache",
+        action="store_true",
+        help="Keep files downloaded from S3 in the local cache",
+    )
     conf = ap.parse_args()
 
     if conf.devel or conf.stdout or no_journal_handler:
@@ -134,6 +168,7 @@ def setup():
         log.info("collectors: %s", conf.collector_hostnames)
 
     setup_dirs(conf, root)
+    setup_geoloc(conf)
 
 
 def per_s(name, item_count, t0):
@@ -1095,6 +1130,129 @@ def score_tor(msm) -> dict:
     return scores
 
 
+def extract_html_title(body: bytes) -> bytes:
+    """Hacky but fast HTML title extraction"""
+    i_start = body.find(b"<title>", 0, 8000)
+    if i_start != -1:
+        i_end = body.find(b"</title>", 8, 8192)
+        if i_end != -1:
+            i_start += 7
+            return body[i_start:i_end]
+
+    i_start = body.find(b"<TITLE>", 0, 8000)
+    if i_start != -1:
+        i_end = body.find(b"</TITLE>", 8, 8192)
+        if i_end != -1:
+            i_start += 7
+            return body[i_start:i_end]
+
+
+def extract_web_connectivity_features(msm, matches) -> dict:
+    """Extract features from HTTP and HTTPS msmt
+    """
+    tk = msm.get("test_keys", {})
+    f = {}
+    f["is_ssl_expected"] = msm.get("input", "").startswith("https:")
+
+    requests = tk.get("requests", ())
+    if not requests:
+        return f
+
+    req = requests[0]
+    resp = req.get("response", {}) or {}
+    body = resp.get("body", None)
+
+    if body is not None:
+
+        if isinstance(body, dict):
+            if "data" in body and body.get("format", "") == "base64":
+                body = b64decode(body["data"])
+
+            else:
+                pass  # TODO: handle error
+
+        elif isinstance(body, str):
+            body = body.encode()
+
+        else:
+            pass  # TODO: handle error
+
+        assert isinstance(body, bytes)
+
+        f["page_len"] = len(body)
+        # page len VS page len from test helper  (float)
+        try:
+            clen = tk["control"]["http_request"]["body_length"]
+            if clen > 0:
+                f["page_len_ratio"] = len(body) / clen
+        except KeyError:
+            pass
+
+        # feature: title (str)
+        title = extract_html_title(body)
+
+    # TODO feature: page content (str)
+    # TODO feature: SSL cert (str)
+    # TODO feature: # TCP TTL      (int)
+
+    # feature: AS of the webserver (str)
+    # feature: CC of the webserver ipaddr (str)
+    # TODO feature: CC of the webserver ASN registration (str)
+    # TODO feature: City of the webserver ipaddr (str)
+    for q in (tk.get("queries", []) or []):
+        if "server_cc" in f:
+            break
+        for ans in q.get("answers", []):
+            if ans.get("answer_type", None) != "A":
+                continue
+
+            ipv4 = ans.get("ipv4", None)
+            loc = geoloc_cc.get(ipv4)
+            if loc:
+                cc = loc["country"]["iso_code"]
+                f["server_cc"] = cc
+
+            as_data = geoloc_asn.get(ipv4)
+            if as_data:
+                f["server_asn"] = int(as_data["autonomous_system_number"])
+                f["server_as_name"] = as_data["autonomous_system_organization"][:30]
+
+            break
+
+    # TODO feature: Fingerprint of CSS/JS/font (list of str? array of int?)
+    # TODO feature: Headers (list of str?)
+
+    # # HTTPS-specific
+    # TODO feature: SSL cert (str)
+
+    return f
+
+
+@metrics.timer("extract_features")
+def extract_features(msm, matches) -> Dict:
+    """Extract features from measurement
+    """
+    tname = msm["test_name"]
+    tk = msm.get("test_keys", {})
+    f = {}
+    f["control_failure"] = tk.get("control_failure", None)  # string
+    if tname == "web_connectivity":
+        try:
+            f = extract_web_connectivity_features(msm, matches)
+        except Exception as e:
+            log.exception(e)
+
+    # feature: control_failure is null (bool)
+
+    # feature: CC of probe (str)
+    # feature: ASN of probe (int)
+    # feature: AS org name of probe (str) ?
+    # f["probe_cc"] = msm["probe_cc"]
+    # f["probe_asn"] = msm["probe_asn"]
+
+    return f
+
+
 @metrics.timer("score_measurement")
 def score_measurement(msm, matches) -> dict:
     """Calculate measurement scoring. Returns a scores dict
@@ -1291,6 +1449,7 @@ def msm_processor(queue):
                 else:
                     matches = []
                 confirmed = bool(len(matches))
+                features = extract_features(measurement, matches)
                 scores = score_measurement(measurement, matches)
                 # Generate anomaly, confirmed and failure to keep consistency
                 # with the pipeline, allowing simple queries in the API and
@@ -1311,6 +1470,7 @@ def msm_processor(queue):
                         tid,
                         fn,
                         conf.update,
+                        **features,
                     )
                 elif not conf.no_write_to_db:
                     db.upsert_summary(
@@ -1332,8 +1492,8 @@ def shut_down(queue):
     log.info("Shutting down workers")
     [queue.put(None) for n in range(NUM_WORKERS)]
     # FIXME
-    #queue.close()
-    #queue.join_thread()
+    # queue.close()
+    # queue.join_thread()
 
 
 def core():
