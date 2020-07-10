@@ -113,18 +113,16 @@ def fetch_cans(s3, conf, files) -> Generator[Path, None, None]:
     """
     # fn: can filename without path
     # diskf: File in the s3cachedir directory
-    to_dload = set()
+    cans = set()  # (filename, filename on disk, size, download required)
     for fn, size in files:
         diskf = conf.s3cachedir / fn
         if diskf.exists() and size == diskf.stat().st_size:
             metrics.incr("cache_hit")
             diskf.touch(exist_ok=True)
+            cans.add((fn, diskf, size, False))
         else:
             metrics.incr("cache_miss")
-            to_dload.add((fn, diskf, size))
-
-    if not to_dload:
-        return
+            cans.add((fn, diskf, size, True))
 
     def _cb(bytes_count):
         if _cb.start_time is None:
@@ -141,10 +139,14 @@ def fetch_cans(s3, conf, files) -> Generator[Path, None, None]:
         except ZeroDivisionError:
             pass
 
-    _cb.total_size = sum(t[2] for t in to_dload)
+    _cb.total_size = sum(t[2] for t in cans if t[3])
     _cb.total_count = 0
 
-    for fn, diskf, size in to_dload:
+    for fn, diskf, size, dload_required in cans:
+        if not dload_required:
+            yield diskf  # already in local cache
+            continue
+
         s3fname = os.path.join("canned", fn)
         # TODO: handle missing file
         log.info("Downloading can %s size %d MB" % (fn, size / 1024 / 1024))
