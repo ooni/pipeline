@@ -18,9 +18,8 @@ from configparser import ConfigParser
 from datetime import datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Iterator, Dict, Any
+from typing import Iterator, Dict, Any, Optional
 import hashlib
-import logging
 import multiprocessing as mp
 import os
 import sys
@@ -30,13 +29,7 @@ import maxminddb as mmdb  # debdeps: python3-maxminddb
 import lz4.frame as lz4frame  # debdeps: python3-lz4
 import ujson  # debdeps: python3-ujson
 
-try:
-    from systemd.journal import JournalHandler  # debdeps: python3-systemd
-
-    no_journal_handler = False
-except ImportError:
-    # this will be the case on macOS for example
-    no_journal_handler = True
+from fastpath.logger import setup_logger, getLogger
 
 # Feeds measurements from Collectors over SSH
 import fastpath.sshfeeder as sshfeeder
@@ -57,7 +50,7 @@ LOCALITY_VALS = ("general", "global", "country", "isp", "local")
 
 NUM_WORKERS = mp.cpu_count() * 4 - 1
 
-log = logging.getLogger("fastpath")
+log = getLogger()  # configured in setup(); see mypy bug #538
 metrics = setup_metrics(name="fastpath")
 
 conf = Namespace()
@@ -116,7 +109,7 @@ def setup_geoloc(conf):
 
 def setup():
     os.environ["TZ"] = "UTC"
-    global conf
+    global conf, log
     ap = ArgumentParser(__doc__)
     ap.add_argument("--start-day", type=lambda d: parse_date(d))
     ap.add_argument("--end-day", type=lambda d: parse_date(d))
@@ -149,13 +142,7 @@ def setup():
     )
     conf = ap.parse_args()
 
-    if conf.devel or conf.stdout or no_journal_handler:
-        format = "%(relativeCreated)d %(process)d %(levelname)s %(name)s %(message)s"
-        logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format=format)
-
-    else:
-        log.addHandler(JournalHandler(SYSLOG_IDENTIFIER="fastpath"))
-        log.setLevel(logging.DEBUG)
+    log = setup_logger("fastpath", devel=(conf.devel or conf.stdout))
 
     # Run inside current directory in devel mode
     root = Path(os.getcwd()) if conf.devel else Path("/")
@@ -1130,7 +1117,7 @@ def score_tor(msm) -> dict:
     return scores
 
 
-def extract_html_title(body: bytes) -> bytes:
+def extract_html_title(body: bytes) -> Optional[bytes]:
     """Hacky but fast HTML title extraction"""
     i_start = body.find(b"<title>", 0, 8000)
     if i_start != -1:
@@ -1146,6 +1133,8 @@ def extract_html_title(body: bytes) -> bytes:
             i_start += 7
             return body[i_start:i_end]
 
+    return None
+
 
 def extract_web_connectivity_features(msm, matches) -> dict:
     """Extract features from HTTP and HTTPS msmt
@@ -1154,7 +1143,7 @@ def extract_web_connectivity_features(msm, matches) -> dict:
     f = {}
     f["is_ssl_expected"] = msm.get("input", "").startswith("https:")
 
-    requests = tk.get("requests", ())
+    requests = tk.get("requests", ()) or ()
     if not requests:
         return f
 
@@ -1199,10 +1188,10 @@ def extract_web_connectivity_features(msm, matches) -> dict:
     # feature: CC of the webserver ipaddr (str)
     # TODO feature: CC of the webserver ASN registration (str)
     # TODO feature: City of the webserver ipaddr (str)
-    for q in (tk.get("queries", []) or []):
+    for q in tk.get("queries", []) or []:
         if "server_cc" in f:
             break
-        for ans in q.get("answers", []):
+        for ans in q.get("answers", []) or []:
             if ans.get("answer_type", None) != "A":
                 continue
 
@@ -1233,7 +1222,7 @@ def extract_features(msm, matches) -> Dict:
     """Extract features from measurement
     """
     tname = msm["test_name"]
-    tk = msm.get("test_keys", {})
+    tk = msm.get("test_keys", {}) or {}
     f = {}
     f["control_failure"] = tk.get("control_failure", None)  # string
     if tname == "web_connectivity":
@@ -1417,6 +1406,8 @@ def file_trimmer(conf):
 def msm_processor(queue):
     """Measurement processor worker
     """
+    log = setup_logger("fastpath", devel=(conf.devel or conf.stdout))
+
     if conf.no_write_to_db:
         log.warning("not writing to database")
     elif conf.clickhouse:
@@ -1426,6 +1417,7 @@ def msm_processor(queue):
 
     while True:
         msm_tup = queue.get()
+        log.mh.reset_context()
         if msm_tup is None:
             log.info("Worker with PID %d exiting", os.getpid())
             return
