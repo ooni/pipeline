@@ -1,3 +1,9 @@
+fastpath (0.31) unstable; urgency=medium
+
+  * Switch to ams-pg.ooni.nu
+
+ -- Federico Ceratto <federico@debian.org>  Wed, 15 Jul 2020 19:28:26 +0100
+
 fastpath (0.29) unstable; urgency=medium
 
   * Trim S3 cache immediately

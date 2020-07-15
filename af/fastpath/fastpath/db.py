@@ -23,7 +23,7 @@ metrics = setup_metrics(name="fastpath.db")
 conn = None
 _autocommit_conn = None
 
-DB_HOST = "hkgmetadb.infra.ooni.io"
+DB_HOST = "ams-pg.ooni.nu"
 DB_USER = "shovel"
 DB_NAME = "metadb"
 DB_PASSWORD = "yEqgNr2eXvgG255iEBxVeP"  # This is already made public
