@@ -394,6 +394,7 @@ def logbug(id: int, desc: str, msm: dict):
     """Log unexpected measurement contents, possibly due to a bug in the probe
     The id helps locating the call to logbug()
     """
+    # Current highest logbug id: 7
     # TODO: use assertions for unknown bugs
     rid = msm.get("report_id", "")
     url = "https://explorer.ooni.org/measurement/{}".format(rid) if rid else "no rid"
@@ -800,7 +801,7 @@ def score_measurement_whatsapp(msm):
 
 @metrics.timer("score_vanilla_tor")
 def score_vanilla_tor(msm):
-    """Calculate measurement scoring for Tor
+    """Calculate measurement scoring for Tor (test_name: vanilla_tor)
     Returns a scores dict
     """
     tk = msm["test_keys"]
@@ -1067,7 +1068,7 @@ def score_psiphon(msm) -> dict:
 
 
 def score_tor(msm) -> dict:
-    """Calculate measurement scoring for Tor
+    """Calculate measurement scoring for Tor (test_name: tor)
     https://github.com/ooni/spec/blob/master/nettests/ts-023-tor.md
     Returns a scores dict
     """
@@ -1082,14 +1083,34 @@ def score_tor(msm) -> dict:
         scores["accuracy"] = 0.0
         return scores
 
+    blocked_cnt = 0
+    not_run_cnt = 0
+    success_cnt = 0
     for d in targets.values():
         if "failure" not in d or "network_events" not in d:
             logbug(6, "missing Tor failure or network_events field", msm)
             scores["accuracy"] = 0.0
             return scores
 
-        if d["failure"] != None:
-            scores["blocking_general"] = 1.0
+        f = d["failure"]
+        # False: did not run: N/A
+        # None: success
+        # string: failed
+        if f is False:
+            not_run_cnt += 1
+        elif f == None:
+            success_cnt += 1
+        elif f == "":
+            #logbug(8
+            assert 0, d
+        else:
+            blocked_cnt += 1
+
+    if blocked_cnt + success_cnt:
+        scores["blocking_general"] = blocked_cnt / (blocked_cnt + success_cnt)
+
+    else:
+        scores["accuracy"] = 0.0
 
     return scores
 
