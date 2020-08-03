@@ -96,7 +96,7 @@ def setup():
     ap.add_argument("--devel", action="store_true", help="Devel mode")
     ap.add_argument("--nossh", action="store_true", help="Do not start SSH feeder")
     ap.add_argument("--stdout", action="store_true", help="Log to stdout")
-    ap.add_argument("--db-uri", help="Database DSN or URI. The string is logged!")
+    ap.add_argument("--db-uri", help="Database DSN or URI.")
     ap.add_argument(
         "--update",
         action="store_true",
@@ -124,13 +124,16 @@ def setup():
 
     # Run inside current directory in devel mode
     root = Path(os.getcwd()) if conf.devel else Path("/")
-    conf.conffile = root / "etc/fastpath.conf"
+    conf.conffile = root / "etc/ooni/fastpath.conf"
     log.info("Using conf file %r", conf.conffile)
     cp = ConfigParser()
     with open(conf.conffile) as f:
         cp.read_file(f)
         conf.collector_hostnames = cp["DEFAULT"]["collectors"].split()
         log.info("collectors: %s", conf.collector_hostnames)
+        if conf.db_uri is None:
+            conf.db_uri = cp["DEFAULT"]["db_uri"].strip()
+
 
     setup_dirs(conf, root)
 

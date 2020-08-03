@@ -23,11 +23,6 @@ metrics = setup_metrics(name="fastpath.db")
 conn = None
 _autocommit_conn = None
 
-DB_HOST = "hkgmetadb.infra.ooni.io"
-DB_USER = "shovel"
-DB_NAME = "metadb"
-DB_PASSWORD = "yEqgNr2eXvgG255iEBxVeP"  # This is already made public
-
 
 def _ping():
     q = "SELECT pg_postmaster_start_time();"
@@ -39,13 +34,9 @@ def _ping():
 
 def setup(conf) -> None:
     global conn, _autocommit_conn
-    if conf.db_uri:
-        dsn = conf.db_uri
-    else:
-        dsn = f"host={DB_HOST} user={DB_USER} dbname={DB_NAME} password={DB_PASSWORD}"
-    log.info("Connecting to database: %r", dsn)
-    conn = psycopg2.connect(dsn)
-    _autocommit_conn = psycopg2.connect(dsn)
+    log.info("Connecting to database")
+    conn = psycopg2.connect(conf.db_uri)
+    _autocommit_conn = psycopg2.connect(conf.db_uri)
     _autocommit_conn.autocommit = True
     _ping()
 
