@@ -106,12 +106,19 @@ def setup():
     ap.add_argument(
         "--stop-after", type=int, help="Stop after feeding N measurements", default=None
     )
-    ap.add_argument("--no-write-msmt", action="store_true",
-                    help="Do not write measurement on disk")
-    ap.add_argument("--no-write-to-db", action="store_true",
-                    help="Do not insert measurement in database")
-    ap.add_argument("--keep-s3-cache", action="store_true",
-                    help="Keep files downloaded from S3 in the local cache")
+    ap.add_argument(
+        "--no-write-msmt", action="store_true", help="Do not write measurement on disk"
+    )
+    ap.add_argument(
+        "--no-write-to-db",
+        action="store_true",
+        help="Do not insert measurement in database",
+    )
+    ap.add_argument(
+        "--keep-s3-cache",
+        action="store_true",
+        help="Keep files downloaded from S3 in the local cache",
+    )
     conf = ap.parse_args()
 
     if conf.devel or conf.stdout or no_journal_handler:
@@ -133,7 +140,6 @@ def setup():
         log.info("collectors: %s", conf.collector_hostnames)
         if conf.db_uri is None:
             conf.db_uri = cp["DEFAULT"]["db_uri"].strip()
-
 
     setup_dirs(conf, root)
 
@@ -1104,7 +1110,7 @@ def score_tor(msm) -> dict:
         elif f == None:
             success_cnt += 1
         elif f == "":
-            #logbug(8
+            # logbug(8
             assert 0, d
         else:
             blocked_cnt += 1
@@ -1342,8 +1348,8 @@ def shut_down(queue):
     log.info("Shutting down workers")
     [queue.put(None) for n in range(NUM_WORKERS)]
     # FIXME
-    #queue.close()
-    #queue.join_thread()
+    # queue.close()
+    # queue.join_thread()
 
 
 def core():
