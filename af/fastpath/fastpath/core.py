@@ -132,12 +132,14 @@ def setup():
     # Run inside current directory in devel mode
     root = Path(os.getcwd()) if conf.devel else Path("/")
     conf.conffile = root / "etc/ooni/fastpath.conf"
-    log.info("Using conf file %r", conf.conffile)
+    log.info("Using conf file %s", conf.conffile)
     cp = ConfigParser()
     with open(conf.conffile) as f:
         cp.read_file(f)
         conf.collector_hostnames = cp["DEFAULT"]["collectors"].split()
         log.info("collectors: %s", conf.collector_hostnames)
+        conf.s3_access_key = cp["DEFAULT"]["s3_access_key"].strip()
+        conf.s3_secret_key = cp["DEFAULT"]["s3_secret_key"].strip()
         if conf.db_uri is None:
             conf.db_uri = cp["DEFAULT"]["db_uri"].strip()
 
