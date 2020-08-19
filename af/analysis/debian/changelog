@@ -1,3 +1,9 @@
+analysis (0.16) unstable; urgency=medium
+
+  * Adapt analysis to ams-pg, move conf in /etc/ooni
+
+ -- Federico Ceratto <federico@debian.org>  Wed, 19 Aug 2020 12:57:53 +0100
+
 analysis (0.15) unstable; urgency=medium
 
   * Add coverage

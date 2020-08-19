@@ -79,7 +79,7 @@ from fastpath import domain_input as domain_input_updater
 
 from analysis.counters_table_updater import counters_table_updater
 
-from analysis.url_prioritization_updater import url_prioritization_updater
+#from analysis.url_prioritization_updater import url_prioritization_updater
 
 # Global conf
 conf = Namespace()
@@ -1353,7 +1353,7 @@ def main():
     global conf
     log.info("Analysis starting")
     cp = ConfigParser()
-    with open("/etc/analysis.conf") as f:
+    with open("/etc/ooni/analysis.conf") as f:
         cp.read_file(f)
 
     conf = parse_args()
@@ -1373,8 +1373,8 @@ def main():
     )
     os.makedirs(conf.output_directory, exist_ok=True)
 
-    t = Thread(target=monitor_measurement_creation, args=(conf,))
-    t.start()
+    #t = Thread(target=monitor_measurement_creation, args=(conf,))
+    #t.start()
 
     t = Thread(target=domain_input_update_runner)
     t.start()
@@ -1382,8 +1382,8 @@ def main():
     t = Thread(target=counters_table_updater, args=(conf,))
     t.start()
 
-    t = Thread(target=url_prioritization_updater, args=(conf,))
-    t.start()
+    #t = Thread(target=url_prioritization_updater, args=(conf,))
+    #t.start()
 
     t = Thread(target=coverage_generator, args=(conf,))
     t.start()
