@@ -22,6 +22,7 @@ metrics = setup_metrics(name="analysis")
 @metrics.timer("populate_counters_table")
 def _populate_counters_table(cur):
     log.info("CTU: Populating counters table from historical data")
+    # TODO merge this query with the one in _update_counters_table
     sql = """
     INSERT INTO counters (measurement_start_day, test_name, probe_cc, probe_asn, input, anomaly_count, confirmed_count, failure_count, measurement_count)
     SELECT
@@ -43,12 +44,10 @@ def _populate_counters_table(cur):
             input,
             anomaly,
             confirmed,
-            measurement.exc IS NOT NULL AS failure,
+            msm_failure AS failure,
             COUNT(*) AS count
         FROM
-            measurement
-            JOIN input ON input.input_no = measurement.input_no
-            JOIN report ON report.report_no = measurement.report_no
+            fastpath
         WHERE
             measurement_start_time < CURRENT_DATE
         GROUP BY
