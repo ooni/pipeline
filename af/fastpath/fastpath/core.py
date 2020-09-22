@@ -25,6 +25,7 @@ import multiprocessing as mp
 import os
 import sys
 import time
+import yaml
 
 import ujson  # debdeps: python3-ujson
 import lz4.frame as lz4frame  # debdeps: python3-lz4
@@ -106,8 +107,10 @@ def setup():
         "--stop-after", type=int, help="Stop after feeding N measurements", default=None
     )
     ap.add_argument(
-        "--no-write-msmt", action="store_true",
-        help="Do not write measurement on disk", default=True
+        "--no-write-msmt",
+        action="store_true",
+        help="Do not write measurement on disk",
+        default=True,
     )
     ap.add_argument(
         "--no-write-to-db",
@@ -1278,6 +1281,14 @@ def file_trimmer(conf):
         time.sleep(60 * 5)
 
 
+def unwrap_msmt(post):
+    fmt = post["format"].lower()
+    if fmt == "json":
+        return post["content"]
+    if fmt == "yaml":
+        return yaml.load(msmt, Loader=yaml.CLoader)
+
+
 def msm_processor(queue):
     """Measurement processor worker
     """
@@ -1297,6 +1308,8 @@ def msm_processor(queue):
                 msm_jstr, measurement = msm_tup
                 if measurement is None:
                     measurement = ujson.loads(msm_jstr)
+                if sorted(measurement.keys()) == ["content", "format"]:
+                    measurement = unwrap_msmt(measurement)
                 rid = measurement.get("report_id", None)
                 inp = measurement.get("input", None)
                 msm_jstr, tid = trivial_id(measurement)
