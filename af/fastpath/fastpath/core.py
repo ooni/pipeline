@@ -15,10 +15,10 @@ See README.adoc
 from argparse import ArgumentParser, Namespace
 from base64 import b64decode
 from configparser import ConfigParser
-from datetime import date, datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Iterator, Dict, Any
+from typing import Iterator
 import hashlib
 import logging
 import multiprocessing as mp
@@ -37,11 +37,11 @@ except ImportError:
     # this will be the case on macOS for example
     no_journal_handler = True
 
-# Feeds measurements from Collectors over SSH
-import fastpath.sshfeeder as sshfeeder
-
 # Feeds measurements from S3
 import fastpath.s3feeder as s3feeder
+
+# Feeds measurements from a local HTTP API
+from fastpath.localhttpfeeder import start_http_api
 
 # Push measurements into Postgres
 import fastpath.db as db
@@ -54,7 +54,7 @@ import fastpath.utils
 
 LOCALITY_VALS = ("general", "global", "country", "isp", "local")
 
-NUM_WORKERS = 15
+NUM_WORKERS = 3
 
 log = logging.getLogger("fastpath")
 metrics = setup_metrics(name="fastpath")
@@ -94,7 +94,7 @@ def setup():
     ap.add_argument("--start-day", type=lambda d: parse_date(d))
     ap.add_argument("--end-day", type=lambda d: parse_date(d))
     ap.add_argument("--devel", action="store_true", help="Devel mode")
-    ap.add_argument("--nossh", action="store_true", help="Do not start SSH feeder")
+    ap.add_argument("--noapi", action="store_true", help="Do not start API feeder")
     ap.add_argument("--stdout", action="store_true", help="Log to stdout")
     ap.add_argument("--db-uri", help="Database DSN or URI.")
     ap.add_argument(
@@ -102,12 +102,12 @@ def setup():
         action="store_true",
         help="Update summaries and files instead of logging an error",
     )
-    ap.add_argument("--interact", action="store_true", help="Interactive mode")
     ap.add_argument(
         "--stop-after", type=int, help="Stop after feeding N measurements", default=None
     )
     ap.add_argument(
-        "--no-write-msmt", action="store_true", help="Do not write measurement on disk"
+        "--no-write-msmt", action="store_true",
+        help="Do not write measurement on disk", default=True
     )
     ap.add_argument(
         "--no-write-to-db",
@@ -282,15 +282,6 @@ def fetch_measurements(start_day, end_day) -> Iterator[MsmtTup]:
     # --start-day and --end-day  with the same date     -> NOP
 
     for measurement_tup in s3feeder.stream_cans(conf, start_day, end_day):
-        yield measurement_tup
-
-    if conf.nossh:
-        log.info("Not fetching over SSH")
-        return
-
-    ## Fetch measurements from collectors: backlog and then realtime ##
-    log.info("Starting fetching over SSH")
-    for measurement_tup in sshfeeder.feed_measurements_from_collectors(conf):
         yield measurement_tup
 
 
@@ -1309,8 +1300,6 @@ def msm_processor(queue):
                 rid = measurement.get("report_id", None)
                 inp = measurement.get("input", None)
                 msm_jstr, tid = trivial_id(measurement)
-                # TODO: log only when using SSH
-                sshfeeder.log_ingestion_delay(measurement)
                 log.debug(f"Processing {tid} {rid} {inp}")
                 fn = generate_filename(tid)
                 if not conf.no_write_msmt:
@@ -1364,7 +1353,6 @@ def core():
     # Load json/yaml files and apply filters like canning
 
     t00 = time.time()
-    scores = None
 
     # Spawn file trimmer process
     if conf.no_write_msmt:
@@ -1380,33 +1368,27 @@ def core():
     try:
         [t.start() for t in workers]
 
-        for measurement_tup in fetch_measurements(conf.start_day, conf.end_day):
-            assert len(measurement_tup) == 2
-            msm_jstr, msm = measurement_tup
-            assert msm_jstr is None or isinstance(msm_jstr, (str, bytes)), type(
-                msm_jstr
-            )
-            assert msm is None or isinstance(msm, dict)
-
-            measurement_cnt += 1
-            while queue.qsize() >= 500:
-                time.sleep(0.1)
-            assert measurement_tup is not None
-            queue.put(measurement_tup)
-            metrics.gauge("queue_size", queue.qsize())
-
-            if conf.stop_after is not None and measurement_cnt >= conf.stop_after:
-                log.info(
-                    "Exiting with stop_after. Total runtime: %f", time.time() - t00
+        if conf.noapi:
+            # Pull measurements from S3
+            for measurement_tup in fetch_measurements(conf.start_day, conf.end_day):
+                assert len(measurement_tup) == 2
+                msm_jstr, msm = measurement_tup
+                assert msm_jstr is None or isinstance(msm_jstr, (str, bytes)), type(
+                    msm_jstr
                 )
-                break
+                assert msm is None or isinstance(msm, dict)
 
-            # Interact from CLI
-            if conf.devel and conf.interact:
-                import bpython  # debdeps: bpython3
+                measurement_cnt += 1
+                while queue.qsize() >= 500:
+                    time.sleep(0.1)
+                assert measurement_tup is not None
+                queue.put(measurement_tup)
+                metrics.gauge("queue_size", queue.qsize())
 
-                bpython.embed(locals_=locals())
-                break
+        else:
+            # Start HTTP API
+            log.info("Starting HTTP API")
+            start_http_api(queue)
 
     except Exception as e:
         log.exception(e)
