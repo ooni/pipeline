@@ -29,16 +29,16 @@ class MsmtFeeder(BaseApplication):
 def start_http_api(queue):
 
     def handler_app(environ, start_response):
-        data = environ["wsgi.input"].read()
-        while queue.qsize() >= 5000:
-            time.sleep(0.1)
-        queue.put((data, None))
+        if environ["REQUEST_METHOD"] == "POST":
+            # TODO:pass msmt_uid
+            msmt_uid = environ["PATH_INFO"]
+            data = environ["wsgi.input"].read()
+            while queue.qsize() >= 5000:
+                time.sleep(0.1)
+            queue.put((data, None))
+
         start_response("200 OK", [])
         return [b""]
 
     options = {"bind": f"127.0.0.1:{API_PORT}"}
     MsmtFeeder(handler_app, options).run()
-
-
-if __name__ == "__main__":
-    start_http_api(None)
