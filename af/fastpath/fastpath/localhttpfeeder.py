@@ -31,11 +31,13 @@ def start_http_api(queue):
     def handler_app(environ, start_response):
         if environ["REQUEST_METHOD"] == "POST":
             # TODO:pass msmt_uid
-            msmt_uid = environ["PATH_INFO"]
+            path = environ["PATH_INFO"]
+            assert path.startswith("/2")
+            msmt_uid = path[1:]
             data = environ["wsgi.input"].read()
             while queue.qsize() >= 5000:
                 time.sleep(0.1)
-            queue.put((data, None))
+            queue.put((data, None, msmt_uid))
 
         start_response("200 OK", [])
         return [b""]

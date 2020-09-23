@@ -280,8 +280,8 @@ def process_measurements_from_s3(queue):
     """Pull measurements from S3 and place them in the queue
     """
     for measurement_tup in s3feeder.stream_cans(conf, conf.start_day, conf.end_day):
-        assert len(measurement_tup) == 2
-        msm_jstr, msm = measurement_tup
+        assert len(measurement_tup) == 3
+        msm_jstr, msm, msm_uid = measurement_tup
         assert msm_jstr is None or isinstance(msm_jstr, (str, bytes)), type(msm_jstr)
         assert msm is None or isinstance(msm, dict)
 
@@ -1310,7 +1310,7 @@ def msm_processor(queue):
 
         with metrics.timer("full_run"):
             try:
-                msm_jstr, measurement = msm_tup
+                msm_jstr, measurement, msmt_uid = msm_tup
                 if measurement is None:
                     measurement = ujson.loads(msm_jstr)
                 if sorted(measurement.keys()) == ["content", "format"]:
@@ -1318,7 +1318,7 @@ def msm_processor(queue):
                 rid = measurement.get("report_id", None)
                 inp = measurement.get("input", None)
                 msm_jstr, tid = trivial_id(measurement)
-                log.debug(f"Processing {tid} {rid} {inp}")
+                log.debug(f"Processing {msmt_uid} {rid} {inp}")
                 fn = generate_filename(tid)
                 if not conf.no_write_msmt:
                     writeout_measurement(msm_jstr, fn, conf.update, tid)
@@ -1344,7 +1344,7 @@ def msm_processor(queue):
                         anomaly,
                         confirmed,
                         failure,
-                        tid,
+                        msmt_uid,
                         fn,
                         conf.update,
                     )

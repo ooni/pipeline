@@ -48,7 +48,7 @@ def upsert_summary(
     anomaly: bool,
     confirmed: bool,
     msm_failure: bool,
-    tid,
+    msmt_uid,
     filename,
     update,
 ) -> None:
@@ -56,10 +56,10 @@ def upsert_summary(
     """
     sql_base_tpl = dedent(
         """\
-    INSERT INTO fastpath (tid, report_id, input, probe_cc, probe_asn, test_name,
+    INSERT INTO fastpath (tid, measurement_uid, report_id, input, probe_cc, probe_asn, test_name,
         test_start_time, measurement_start_time, platform, filename, scores,
         anomaly, confirmed, msm_failure)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT ON CONSTRAINT fastpath_pkey DO
     """
     )
@@ -90,7 +90,8 @@ def upsert_summary(
     if "annotations" in msm and isinstance(msm["annotations"], dict):
         platform = msm["annotations"].get("platform", "unset")
     args = (
-        tid,
+        msmt_uid or "-",
+        msmt_uid,
         msm["report_id"],
         msm.get("input", None),
         msm["probe_cc"],
@@ -134,7 +135,7 @@ def upsert_summary(
             return
 
         notification = {k: msm.get(k, None) for k in cols}
-        notification["trivial_id"] = tid
+        notification["measurement_uid"] = msmt_uid
         notification["scores"] = scores
         notification_json = ujson.dumps(notification)
         q = f"SELECT pg_notify('fastpath', '{notification_json}');"

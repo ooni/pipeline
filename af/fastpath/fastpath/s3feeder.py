@@ -60,18 +60,18 @@ def load_multiple(fn: str) -> Generator[MsmtTup, None, None]:
                 assert k is not None
                 if m.name.endswith(".json"):
                     for line in k:
-                        yield (line, None)
+                        yield (line, None, None)
 
                 elif m.name.endswith(".yaml"):
                     continue  # FIXME
                     bucket_tstamp = "FIXME"
                     for msm in iter_yaml_msmt_normalized(k, bucket_tstamp):
-                        yield (None, msm)
+                        yield (None, msm, None)
 
     elif fn.endswith(".json.lz4"):
         with lz4frame.open(fn) as f:
             for line in f:
-                yield (line, None)
+                yield (line, None, None)
 
     elif fn.endswith(".yaml.lz4"):
         with lz4frame.open(fn) as f:
