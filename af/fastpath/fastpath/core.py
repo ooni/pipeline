@@ -18,7 +18,7 @@ from configparser import ConfigParser
 from datetime import datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Iterator
+from typing import Iterator, Dict, Any
 import hashlib
 import logging
 import multiprocessing as mp
@@ -276,16 +276,21 @@ def prepare_for_json_normalize(report):
         pass
 
 
-def fetch_measurements(start_day, end_day) -> Iterator[MsmtTup]:
-    """Fetch measurements from S3 and the collectors
+def process_measurements_from_s3(queue):
+    """Pull measurements from S3 and place them in the queue
     """
-    # no --start-day or --end-day   -> Run over SSH
-    # --start-day                   -> Run on old cans, then over SSH
-    # --start-day and --end-day     -> Run on old cans
-    # --start-day and --end-day  with the same date     -> NOP
+    for measurement_tup in s3feeder.stream_cans(conf, conf.start_day, conf.end_day):
+        assert len(measurement_tup) == 2
+        msm_jstr, msm = measurement_tup
+        assert msm_jstr is None or isinstance(msm_jstr, (str, bytes)), type(msm_jstr)
+        assert msm is None or isinstance(msm, dict)
 
-    for measurement_tup in s3feeder.stream_cans(conf, start_day, end_day):
-        yield measurement_tup
+        measurement_cnt += 1
+        while queue.qsize() >= 500:
+            time.sleep(0.1)
+        assert measurement_tup is not None
+        queue.put(measurement_tup)
+        metrics.gauge("queue_size", queue.qsize())
 
 
 @metrics.timer("match_fingerprints")
@@ -1383,20 +1388,7 @@ def core():
 
         if conf.noapi:
             # Pull measurements from S3
-            for measurement_tup in fetch_measurements(conf.start_day, conf.end_day):
-                assert len(measurement_tup) == 2
-                msm_jstr, msm = measurement_tup
-                assert msm_jstr is None or isinstance(msm_jstr, (str, bytes)), type(
-                    msm_jstr
-                )
-                assert msm is None or isinstance(msm, dict)
-
-                measurement_cnt += 1
-                while queue.qsize() >= 500:
-                    time.sleep(0.1)
-                assert measurement_tup is not None
-                queue.put(measurement_tup)
-                metrics.gauge("queue_size", queue.qsize())
+            process_measurements_from_s3(queue)
 
         else:
             # Start HTTP API

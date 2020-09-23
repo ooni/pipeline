@@ -203,6 +203,7 @@ def _update_eta(t0, start_day, day, stop_day, can_num, can_tot_count):
 def stream_cans(conf, start_day: date, end_day: date) -> Generator[MsmtTup, None, None]:
     """Stream cans from S3
     """
+    # TODO: implement new postcan format as well
     today = date.today()
     if not start_day or start_day >= today:
         return
