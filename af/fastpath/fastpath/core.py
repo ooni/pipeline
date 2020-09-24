@@ -74,16 +74,11 @@ def setup_dirs(conf, root):
     conf.vardir = root / "var/lib/fastpath"
     conf.cachedir = conf.vardir / "cache"
     conf.s3cachedir = conf.cachedir / "s3"
-    conf.dfdir = conf.vardir / "dataframes"
-    conf.outdir = conf.vardir / "output"
-    conf.msmtdir = conf.outdir / "measurements"
+    # conf.outdir = conf.vardir / "output"
     for p in (
         conf.vardir,
         conf.cachedir,
         conf.s3cachedir,
-        conf.dfdir,
-        conf.outdir,
-        conf.msmtdir,
     ):
         p.mkdir(parents=True, exist_ok=True)
 
@@ -105,12 +100,6 @@ def setup():
     )
     ap.add_argument(
         "--stop-after", type=int, help="Stop after feeding N measurements", default=None
-    )
-    ap.add_argument(
-        "--no-write-msmt",
-        action="store_true",
-        help="Do not write measurement on disk",
-        default=True,
     )
     ap.add_argument(
         "--no-write-to-db",
@@ -285,7 +274,6 @@ def process_measurements_from_s3(queue):
         assert msm_jstr is None or isinstance(msm_jstr, (str, bytes)), type(msm_jstr)
         assert msm is None or isinstance(msm, dict)
 
-        measurement_cnt += 1
         while queue.qsize() >= 500:
             time.sleep(0.1)
         assert measurement_tup is not None
@@ -1178,8 +1166,9 @@ def score_measurement(msm, matches) -> dict:
 
 
 @metrics.timer("trivial_id")
-def trivial_id(msm):
+def trivial_id(msm: dict) -> str:
     """Generate a trivial id of the measurement to allow upsert if needed
+    This is used for legacy (before measurement_uid) measurements
     - 32-bytes hexdigest
     - Deterministic / stateless with no DB interaction
     - Malicious/bugged msmts with collisions on report_id/input/test_name lead
@@ -1196,94 +1185,7 @@ def trivial_id(msm):
     VER = "00"
     msm_jstr = ujson.dumps(msm, sort_keys=True, ensure_ascii=False).encode()
     tid = VER + hashlib.shake_128(msm_jstr).hexdigest(15)
-    return msm_jstr, tid
-
-
-def generate_filename(tid):
-    """Generate filesystem-safe filename from a measurement
-    """
-    return tid + ".json.lz4"
-
-
-@metrics.timer("writeout_measurement")
-def writeout_measurement(msm_jstr, fn, update, tid):
-    """Safely write measurement to disk
-    """
-    # Different processes might be trying to write the same file at the same
-    # time due to naming collisions. Use a safe tmpfile and atomic link
-    # NamedTemporaryFile creates files with permissions 600
-    # but we want other users (Nginx) to be able to read the measurement
-
-    suffix = ".{}.tmp".format(os.getpid())
-    with NamedTemporaryFile(suffix=suffix, dir=conf.msmtdir) as f:
-        with lz4frame.open(f, "w") as lzf:
-            lzf.write(msm_jstr)
-            # os.fsync(lzf.fileno())
-
-            final_fname = conf.msmtdir.joinpath(fn)
-            try:
-                os.chmod(f.name, 0o644)
-                os.link(f.name, final_fname)
-                metrics.incr("msmt_output_file_created")
-            except FileExistsError:
-                if update:
-                    # update access time - used for cache cleanup
-                    # no need to overwrite the file
-                    os.utime(final_fname)
-                    metrics.incr("msmt_output_file_updated")
-                else:
-                    log.info(f"{tid} Refusing to overwrite {final_fname}")
-                    metrics.incr("report_id_input_file_collision")
-                    metrics.incr("msmt_output_file_skipped")
-                    os.utime(final_fname)
-
-    metrics.incr("wrote_uncompressed_bytes", len(msm_jstr))
-
-
-@metrics.timer("trim_old_measurements")
-def _trim_old_measurements(conf):
-    """Trim old measurement files on disk
-    """
-    s = os.statvfs(conf.msmtdir)
-    free_gb = s.f_bavail * s.f_bsize / 2 ** 30  # float
-    if free_gb > 20:
-        log.info("No trimming: %d GB free", free_gb)
-        return
-
-    # 4.89 GB free: keep only the last 24h;    10 GB free: keep 100h
-    # The globbing gets slower with larger backlogs but the quadratic behavior
-    # can become as aggressive as needed
-    keep_hours = free_gb ** 2
-    keep_hours = max(keep_hours, 24)  # safety
-    log.info(
-        "Starting file trimming: %.1f GB free, keeping the last %.2f hours"
-        % (free_gb, keep_hours)
-    )
-    # Delete files ignoring race conditions
-    time_threshold = time.time() - 3600 * keep_hours
-    file_cnt = 0
-    for f in conf.msmtdir.glob("*.lz4"):
-        try:
-            if f.stat().st_mtime < time_threshold:
-                f.unlink()
-                file_cnt += 1
-        except FileNotFoundError:
-            pass
-
-    log.debug("Deleted %d files", file_cnt)
-    metrics.incr("deleted_files", file_cnt)
-
-
-def file_trimmer(conf):
-    """Trim measurement files to free disk space.
-    Runs in a dedicated thread
-    """
-    while True:
-        try:
-            _trim_old_measurements(conf)
-        except Exception as e:
-            log.exception(e)
-        time.sleep(60 * 5)
+    return tid
 
 
 def unwrap_msmt(post):
@@ -1297,10 +1199,7 @@ def unwrap_msmt(post):
 def msm_processor(queue):
     """Measurement processor worker
     """
-    if conf.no_write_to_db:
-        log.warning("not writing to database")
-    else:
-        db.setup(conf)
+    db.setup(conf)
 
     while True:
         msm_tup = queue.get()
@@ -1317,11 +1216,7 @@ def msm_processor(queue):
                     measurement = unwrap_msmt(measurement)
                 rid = measurement.get("report_id", None)
                 inp = measurement.get("input", None)
-                msm_jstr, tid = trivial_id(measurement)
                 log.debug(f"Processing {msmt_uid} {rid} {inp}")
-                fn = generate_filename(tid)
-                if not conf.no_write_msmt:
-                    writeout_measurement(msm_jstr, fn, conf.update, tid)
                 if measurement.get("test_name", None) == "web_connectivity":
                     matches = match_fingerprints(measurement)
                 else:
@@ -1335,19 +1230,31 @@ def msm_processor(queue):
                 failure = scores.get("accuracy", 1.0) < 0.5
                 if anomaly or failure or confirmed:
                     log.debug(
-                        f"Storing {tid} {rid} {inp} A{int(anomaly)} F{int(failure)} C{int(confirmed)}"
+                        f"Storing {msmt_uid} {rid} {inp} A{int(anomaly)} F{int(failure)} C{int(confirmed)}"
                     )
-                if not conf.no_write_to_db:
-                    db.upsert_summary(
-                        measurement,
-                        scores,
-                        anomaly,
-                        confirmed,
-                        failure,
-                        msmt_uid,
-                        fn,
-                        conf.update,
-                    )
+                sw_name = measurement.get("software_name", "unknown")
+                sw_version = measurement.get("software_version", "unknown")
+                platform = "unset"
+                if "annotations" in measurement and isinstance(
+                    measurement["annotations"], dict
+                ):
+                    platform = measurement["annotations"].get("platform", "unset")
+
+                if msmt_uid is None:
+                    msmt_uid = trivial_id(measurement)  # legacy measurement
+
+                db.upsert_summary(
+                    measurement,
+                    scores,
+                    anomaly,
+                    confirmed,
+                    failure,
+                    msmt_uid,
+                    sw_name,
+                    sw_version,
+                    platform,
+                    conf.update,
+                )
             except Exception as e:
                 log.exception(e)
                 metrics.incr("unhandled_exception")
@@ -1362,8 +1269,6 @@ def shut_down(queue):
 
 
 def core():
-    measurement_cnt = 0
-
     # There are 3 main data sources, in order of age:
     # - cans on S3
     # - older report files on collectors (max 1 day of age)
@@ -1371,12 +1276,6 @@ def core():
     # Load json/yaml files and apply filters like canning
 
     t00 = time.time()
-
-    # Spawn file trimmer process
-    if conf.no_write_msmt:
-        log.warning("Not trimming old measurement on disk")
-    else:
-        mp.Process(target=file_trimmer, args=(conf,)).start()
 
     # Spawn worker processes
     # 'queue' is a singleton from the portable_queue module

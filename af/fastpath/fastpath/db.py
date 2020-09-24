@@ -48,16 +48,18 @@ def upsert_summary(
     anomaly: bool,
     confirmed: bool,
     msm_failure: bool,
-    msmt_uid,
-    filename,
-    update,
+    measurement_uid: str,
+    software_name: str,
+    software_version: str,
+    platform: str,
+    update: bool,
 ) -> None:
     """Insert a row in the fastpath_scores table. Overwrite an existing one.
     """
     sql_base_tpl = dedent(
         """\
-    INSERT INTO fastpath (tid, measurement_uid, report_id, input, probe_cc, probe_asn, test_name,
-        test_start_time, measurement_start_time, platform, filename, scores,
+    INSERT INTO fastpath (measurement_uid, report_id, input, probe_cc, probe_asn, test_name,
+        test_start_time, measurement_start_time, platform, software_name, software_version, scores,
         anomaly, confirmed, msm_failure)
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT ON CONSTRAINT fastpath_pkey DO
@@ -74,7 +76,8 @@ def upsert_summary(
         test_start_time = excluded.test_start_time,
         measurement_start_time = excluded.measurement_start_time,
         platform = excluded.platform,
-        filename = excluded.filename,
+        software_name = excluded.software_version,
+        software_version = excluded.software_version,
         scores = excluded.scores,
         anomaly = excluded.anomaly,
         confirmed = excluded.confirmed,
@@ -86,12 +89,8 @@ def upsert_summary(
     tpl = sql_base_tpl + (sql_update if update else sql_noupdate)
 
     asn = int(msm["probe_asn"][2:])  # AS123
-    platform = "unset"
-    if "annotations" in msm and isinstance(msm["annotations"], dict):
-        platform = msm["annotations"].get("platform", "unset")
     args = (
-        msmt_uid or "-",
-        msmt_uid,
+        measurement_uid,
         msm["report_id"],
         msm.get("input", None),
         msm["probe_cc"],
@@ -100,7 +99,8 @@ def upsert_summary(
         msm["test_start_time"],
         msm["measurement_start_time"],
         platform,
-        filename,
+        software_name,
+        software_version,
         Json(scores, dumps=ujson.dumps),
         anomaly,
         confirmed,
@@ -109,7 +109,7 @@ def upsert_summary(
 
     # Send notification using pg_notify
     # TODO: do not send notifications during manual run or in devel mode
-    cols = (
+    notif_cols = (
         "report_id",
         "input",
         "probe_cc",
@@ -123,20 +123,24 @@ def upsert_summary(
     with _autocommit_conn.cursor() as cur:
         try:
             cur.execute(tpl, args)
-            # log.debug(cur.query.decode())
         except psycopg2.ProgrammingError:
             log.error("upsert syntax error in %r", tpl, exc_info=True)
             return
 
-        if cur.rowcount == 0 and not update:
-            metrics.incr("report_id_input_db_collision")
-            inp = msm.get("input", "<no input>")
-            log.info(f"report_id / input collision {msm['report_id']} {inp}")
-            return
+        if cur.rowcount == 0:
+            if update:
+                log.error("Failed to upsert")
+            else:
+                metrics.incr("measurement_noupsert_count")
+                log.info(f"measurement tid/uid collision")
+                return
+        else:
+            metrics.incr("measurement_upsert_count")
 
-        notification = {k: msm.get(k, None) for k in cols}
-        notification["measurement_uid"] = msmt_uid
-        notification["scores"] = scores
-        notification_json = ujson.dumps(notification)
-        q = f"SELECT pg_notify('fastpath', '{notification_json}');"
-        cur.execute(q)
+        # TODO: event detector not deployed on AMS-PG
+        # notification = {k: msm.get(k, None) for k in notif_cols}
+        # notification["measurement_uid"] = msmt_uid
+        # notification["scores"] = scores
+        # notification_json = ujson.dumps(notification)
+        # q = f"SELECT pg_notify('fastpath', '{notification_json}');"
+        # cur.execute(q)
