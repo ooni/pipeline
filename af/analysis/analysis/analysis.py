@@ -43,7 +43,6 @@ from configparser import ConfigParser
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
-from threading import Thread
 from urllib.parse import urlencode
 import os
 import time
@@ -77,9 +76,7 @@ from analysis.metrics import setup_metrics  # debdeps: python3-statsd
 # Imported from the fastpath package
 from fastpath import domain_input as domain_input_updater
 
-from analysis.counters_table_updater import counters_table_updater
-
-from analysis.url_prioritization_updater import url_prioritization_updater
+from analysis.counters_table_updater import update_all_counters_tables, update_tables_daily
 
 # Global conf
 conf = Namespace()
@@ -88,7 +85,7 @@ conf = Namespace()
 dbengine = None
 conn = None
 
-log = logging.getLogger("analysis")
+log = logging.getLogger(__name__)
 metrics = setup_metrics(name="analysis")
 
 node_exporter_path = "/run/nodeexp/analysis.prom"
@@ -974,11 +971,9 @@ def detect_blocking():
 
 def parse_args():
     ap = ArgumentParser("Analysis script " + __doc__)
-    ap.add_argument(
-        "--no-update-confirmed-stats",
-        action="store_true",
-        help="Do not update confirmed_stats table",
-    )
+    ap.add_argument("--update-counters", action="store_true", help="Update counters table")
+    ap.add_argument("--update-tables-daily", action="store_true", help="Run daily update")
+    #ap.add_argument("--", action="store_true", help="")
     ap.add_argument("--devel", action="store_true", help="Devel mode")
     ap.add_argument("--stdout", action="store_true", help="Log to stdout")
     return ap.parse_args()
@@ -1328,32 +1323,25 @@ def monitor_measurement_creation(conf):
 
 
 def domain_input_update_runner():
-    """Runs domain_input_updater every 2 hours.
-    Spawn a domain_input_updater.run() thread for each run.
+    """Runs domain_input_updater
     """
-
-    def _runner():
-        conf = Namespace(dry_run=False, db_uri=None)
-        with metrics.timer("domain_input_updater_runtime"):
-            log.info("domain_input_updater: starting")
-            try:
-                domain_input_updater.run(conf)
-                metrics.gauge("domain_input_updater_success", 1)
-                log.info("domain_input_updater: success")
-            except Exception as e:
-                metrics.gauge("domain_input_updater_success", 0)
-                log.error("domain_input_updater: failure %r", e)
-
-    while True:
-        Thread(target=_runner).start()
-        time.sleep(3600 * 2)
+    conf = Namespace(dry_run=False, db_uri=None)
+    with metrics.timer("domain_input_updater_runtime"):
+        log.info("domain_input_updater: starting")
+        try:
+            domain_input_updater.run(conf)
+            metrics.gauge("domain_input_updater_success", 1)
+            log.info("domain_input_updater: success")
+        except Exception as e:
+            metrics.gauge("domain_input_updater_success", 0)
+            log.error("domain_input_updater: failure %r", e)
 
 
 def main():
     global conf
     log.info("Analysis starting")
     cp = ConfigParser()
-    with open("/etc/analysis.conf") as f:
+    with open("/etc/ooni/analysis.conf") as f:
         cp.read_file(f)
 
     conf = parse_args()
@@ -1373,25 +1361,23 @@ def main():
     )
     os.makedirs(conf.output_directory, exist_ok=True)
 
-    t = Thread(target=monitor_measurement_creation, args=(conf,))
-    t.start()
+    #monitor_measurement_creation(conf)
 
-    t = Thread(target=domain_input_update_runner)
-    t.start()
+    #domain_input_update_runner(conf)
 
-    t = Thread(target=counters_table_updater, args=(conf,))
-    t.start()
+    try:
+        if conf.update_counters:
+            update_all_counters_tables(conf)
 
-    t = Thread(target=url_prioritization_updater, args=(conf,))
-    t.start()
+        if conf.update_tables_daily:
+            update_tables_daily(conf)
 
-    t = Thread(target=coverage_generator, args=(conf,))
-    t.start()
+    except Exception as e:
+        log.error(str(e), exc_info=e)
 
-    log.info("Starting generate_slow_query_summary loop")
-    while True:
-        generate_slow_query_summary(conf)
-        time.sleep(5 * 60)
+    #coverage_generator(conf)
+
+    #generate_slow_query_summary(conf)
 
     # # Update confirmed_stats table. The update is idempotent. The table is used
     # # in the next steps.
