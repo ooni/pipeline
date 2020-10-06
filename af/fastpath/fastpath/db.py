@@ -8,6 +8,7 @@ See ../../oometa/017-fastpath.install.sql for the tables structure
 """
 
 from textwrap import dedent
+from urllib.parse import urlparse
 import logging
 
 import psycopg2  # debdeps: python3-psycopg2
@@ -58,10 +59,10 @@ def upsert_summary(
     """
     sql_base_tpl = dedent(
         """\
-    INSERT INTO fastpath (measurement_uid, report_id, input, probe_cc, probe_asn, test_name,
+    INSERT INTO fastpath (measurement_uid, report_id, domain, input, probe_cc, probe_asn, test_name,
         test_start_time, measurement_start_time, platform, software_name, software_version, scores,
         anomaly, confirmed, msm_failure)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT ON CONSTRAINT fastpath_pkey DO
     """
     )
@@ -69,6 +70,7 @@ def upsert_summary(
         """\
     UPDATE SET
         report_id = excluded.report_id,
+        domain = excluded.domain,
         input = excluded.input,
         probe_cc = excluded.probe_cc,
         probe_asn = excluded.probe_asn,
@@ -89,10 +91,13 @@ def upsert_summary(
     tpl = sql_base_tpl + (sql_update if update else sql_noupdate)
 
     asn = int(msm["probe_asn"][2:])  # AS123
+    input_ = msm.get("input", None)
+    domain = None if input_ is None else urlparse(input_).netloc
     args = (
         measurement_uid,
         msm["report_id"],
-        msm.get("input", None),
+        domain,
+        input_,
         msm["probe_cc"],
         asn,
         msm["test_name"],
