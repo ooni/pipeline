@@ -9,7 +9,9 @@ from argparse import ArgumentParser
 
 # Refresh / compare using
 # ssh ams-pg.ooni.org -t pg_dump metadb -U shovel --schema-only | \
-# grep -v  '^-' | uniq |  sed 's/\r$//' >> database_upgrade_schema.sql
+# grep -v  '^-' | uniq |  sed 's/\r$//' > database_upgrade_schema.sql
+#
+# meld database_upgrade_schema.py database_upgrade_schema.sql
 
 
 def db_setup():
@@ -76,7 +78,11 @@ CREATE TABLE public.citizenlab (
 
 ALTER TABLE public.citizenlab OWNER TO shovel;
 
-CREATE TABLE public.counters (
+COMMENT ON COLUMN public.citizenlab.domain IS 'FQDN or ipaddr without http and port number';
+
+COMMENT ON COLUMN public.citizenlab.category_code IS 'Category from Citizen Lab';
+
+CREATE UNLOGGED TABLE public.counters (
     measurement_start_day date,
     test_name text,
     probe_cc character(2) NOT NULL,
@@ -156,6 +162,14 @@ CREATE TABLE public.fastpath (
 
 ALTER TABLE public.fastpath OWNER TO shovel;
 
+COMMENT ON TABLE public.fastpath IS 'Measurements created by fastpath';
+
+COMMENT ON COLUMN public.fastpath.measurement_uid IS 'Trivial ID';
+
+COMMENT ON COLUMN public.fastpath.filename IS 'File served by the fastpath host containing the raw measurement';
+
+COMMENT ON COLUMN public.fastpath.scores IS 'Scoring metadata';
+
 CREATE MATERIALIZED VIEW public.global_by_month AS
  SELECT count(DISTINCT counters.probe_asn) AS networks_by_month,
     count(DISTINCT counters.probe_cc) AS countries_by_month,
@@ -190,6 +204,15 @@ ALTER TABLE public.jsonl OWNER TO shovel;
 ALTER TABLE ONLY public.fastpath
     ADD CONSTRAINT fastpath_pkey PRIMARY KEY (measurement_uid);
 
+ALTER TABLE ONLY public.counters_asn_noinput
+    ADD CONSTRAINT unique_counters_asn_noinput_cell UNIQUE (measurement_start_day, test_name, probe_cc, probe_asn);
+
+ALTER TABLE ONLY public.counters
+    ADD CONSTRAINT unique_counters_cell UNIQUE (measurement_start_day, test_name, probe_cc, probe_asn, input);
+
+ALTER TABLE ONLY public.counters_noinput
+    ADD CONSTRAINT unique_counters_noinput_cell UNIQUE (measurement_start_day, test_name, probe_cc);
+
 CREATE INDEX autoclavedlookup_idx ON public.autoclavedlookup USING hash (md5((report_id || COALESCE(input, ''::text))));
 
 CREATE INDEX autoclavedlookup_report2_idx ON public.autoclavedlookup USING hash (report_id);
@@ -208,19 +231,7 @@ CREATE INDEX counters_multi_brin_idx ON public.counters USING brin (measurement_
 
 CREATE INDEX counters_noinput_brin_multi_idx ON public.counters_noinput USING brin (measurement_start_day, test_name, probe_cc, anomaly_count, confirmed_count, failure_count, measurement_count) WITH (pages_per_range='32');
 
-CREATE INDEX domain_input_domain_idx ON public.domain_input USING btree (domain);
-
-CREATE INDEX domain_input_input_no_idx ON public.domain_input USING btree (input_no);
-
-CREATE INDEX fastpath_brin_idx ON public.fastpath USING brin (measurement_start_time, probe_cc, input) WITH (pages_per_range='32');
-
-CREATE INDEX fastpath_input_idx ON public.fastpath USING btree (input);
-
-CREATE INDEX fastpath_measurement_start_time_idx ON public.fastpath USING brin (measurement_start_time) WITH (pages_per_range='128');
-
-CREATE INDEX fastpath_month_partial_idx ON public.fastpath USING btree (measurement_start_time) WHERE ((measurement_start_time > '2020-08-01 00:00:00'::timestamp without time zone) AND (measurement_start_time < '2020-09-01 00:00:00'::timestamp without time zone));
-
-CREATE INDEX fastpath_report_id_idx ON public.fastpath USING btree (report_id);
+CREATE INDEX fastpath_multi_idx ON public.fastpath USING btree (measurement_start_time, probe_cc, test_name, domain);
 
 CREATE INDEX fastpath_report_id_input_idx ON public.fastpath USING btree (report_id, input);
 
@@ -232,9 +243,7 @@ GRANT SELECT ON TABLE public.citizenlab TO readonly;
 GRANT SELECT ON TABLE public.citizenlab TO "oomsm-beta";
 GRANT SELECT ON TABLE public.citizenlab TO amsapi;
 
-GRANT SELECT ON TABLE public.domain_input TO readonly;
-GRANT SELECT ON TABLE public.domain_input TO "oomsm-beta";
-GRANT SELECT ON TABLE public.domain_input TO amsapi;
+GRANT SELECT ON TABLE public.counters TO readonly;
 
 GRANT SELECT ON TABLE public.fastpath TO readonly;
 GRANT SELECT ON TABLE public.fastpath TO amsapi;
