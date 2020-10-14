@@ -88,7 +88,6 @@ conn = None
 log = logging.getLogger(__name__)
 metrics = setup_metrics(name="analysis")
 
-node_exporter_path = "/run/nodeexp/analysis.prom"
 
 
 def setup_database_connection(c):
@@ -1118,7 +1117,6 @@ def monitor_measurement_creation(conf):
     # TODO: switch to OOID
 
     INTERVAL = 60 * 5
-    nodeexp_path = "/run/nodeexp/db_metrics.prom"
     if has_systemd:
         watchdog = sdnotify.SystemdNotifier()
 
@@ -1269,7 +1267,7 @@ def monitor_measurement_creation(conf):
             else:
                 gauge_family.labels("replication_delay").set(delay)
 
-            prom.write_to_textfile(nodeexp_path, prom_reg)
+            #prom.write_to_textfile(nodeexp_path, prom_reg)
 
             # The following queries are heavier
             if cycle_seconds == 0:
@@ -1302,7 +1300,7 @@ def monitor_measurement_creation(conf):
                                 f"{query_name}_{age_in_days}_days_ago"
                             ).set(val)
 
-                prom.write_to_textfile(nodeexp_path, prom_reg)
+                #prom.write_to_textfile(nodeexp_path, prom_reg)
 
             cycle_seconds = (cycle_seconds + INTERVAL) % 3600
 
