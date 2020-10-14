@@ -22,51 +22,29 @@ metrics = setup_metrics(name="counters_update")
 
 @metrics.timer("populate_counters_table")
 def _populate_counters_table(cur):
+    # Used once
     log.info("Populating counters table from historical data")
     sql = """
-    INSERT INTO counters (measurement_start_day, test_name, probe_cc, probe_asn, input, anomaly_count, confirmed_count, failure_count, measurement_count)
+    INSERT INTO counters
     SELECT
-        measurement_start_day,
+        date_trunc('day', measurement_start_time) AS measurement_start_day,
         test_name::text,
         probe_cc,
         probe_asn,
         input,
-        sum(CASE WHEN anomaly IS TRUE THEN count END) AS anomaly_count,
-        sum(CASE WHEN confirmed IS TRUE THEN count END) AS confirmed_count,
-        sum(CASE WHEN failure IS TRUE THEN count END) AS failure_count,
-        sum(count) AS measurement_count
-    FROM (
-        SELECT
-            date_trunc('day', measurement_start_time) AS measurement_start_day,
-            test_name::text,
-            probe_cc,
-            probe_asn,
-            input,
-            anomaly,
-            confirmed,
-            measurement.exc IS NOT NULL AS failure,
-            COUNT(*) AS count
-        FROM
-            measurement
-            JOIN input ON input.input_no = measurement.input_no
-            JOIN report ON report.report_no = measurement.report_no
-        WHERE
-            measurement_start_time < CURRENT_DATE
-        GROUP BY
-            measurement_start_day,
-            test_name,
-            probe_cc,
-            probe_asn,
-            input,
-            anomaly,
-            confirmed,
-            failure) sub
+        count(CASE WHEN anomaly THEN 1 END) AS anomaly_count,
+        count(CASE WHEN confirmed THEN 1 END) AS confirmed_count,
+        count(CASE WHEN msm_failure THEN 1 END) AS failure_count,
+        COUNT(*) AS measurement_count
+    FROM fastpath
     GROUP BY
         measurement_start_day,
-        test_name::text,
+        test_name,
         probe_cc,
         probe_asn,
         input
+    ON CONFLICT (measurement_start_day, test_name, probe_cc, probe_asn, input)
+    DO nothing
     """
     cur.execute(sql)
     log.info("Populated with %d rows", cur.rowcount)
@@ -216,6 +194,7 @@ def update_all_counters_tables(conf):
     the tables completely or partially
     """
     log.info("Started update_all_counters_tables")
+    metrics.gauge("update_all_counters_tables.running", 1)
     start = datetime.now() - timedelta(minutes=10)
     msm_uid_start = start.strftime("%Y%m%d%H%M")
     msm_uid_end = datetime.utcnow().strftime("%Y%m%d%H%M")
@@ -231,6 +210,7 @@ def update_all_counters_tables(conf):
         update_counters_noinput_table(conn, msm_uid_start, msm_uid_end)
 
     conn.close()
+    metrics.gauge("update_all_counters_tables.running", 0)
     log.info("Done")
 
 
@@ -266,6 +246,7 @@ def update_tables_daily(conf):
     The tables are created in database_upgrade_schema.py
     """
     log.info("Started update_tables_daily")
+    metrics.gauge("update_tables_daily.running", 1)
     conn = connect_db(conf.active)
     with conn:
         refresh_global_stats(conn)
@@ -277,4 +258,5 @@ def update_tables_daily(conf):
         refresh_global_by_month(conn)
 
     conn.close()
+    metrics.gauge("update_tables_daily.running", 0)
     log.info("Done")
