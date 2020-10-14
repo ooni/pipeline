@@ -85,7 +85,7 @@ conf = Namespace()
 dbengine = None
 conn = None
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("analysis")
 metrics = setup_metrics(name="analysis")
 
 
@@ -1354,6 +1354,7 @@ def main():
     for role in ("active", "standby"):
         setattr(conf, role, dict(cp[role]))
 
+    log.info("Logging started")
     conf.output_directory = (
         Path("./var/lib/analysis") if conf.devel else Path("/var/lib/analysis")
     )

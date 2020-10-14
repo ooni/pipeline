@@ -175,8 +175,6 @@ def update_counters_noinput_table(conn, msm_uid_start, msm_uid_end):
     measurement_count  = counters_noinput.measurement_count + EXCLUDED.measurement_count
     """
         d = dict(msm_uid_start=msm_uid_start, msm_uid_end=msm_uid_end)
-        print(sql)
-        print(d)
         cur.execute(sql, d)
         log.info("Inserted: %d", cur.rowcount)
 
@@ -223,6 +221,7 @@ def refresh_global_stats(conn):
     with conn.cursor() as cur:
         sql = "REFRESH MATERIALIZED VIEW global_stats"
         cur.execute(sql)
+        log.info("Populated with %d rows", cur.rowcount)
 
 
 @metrics.timer("refresh_country_stats")
