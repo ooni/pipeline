@@ -219,6 +219,7 @@ def update_all_counters_tables(conf):
 
 @metrics.timer("refresh_global_stats")
 def refresh_global_stats(conn):
+    log.info("Running refresh_global_stats")
     with conn.cursor() as cur:
         sql = "REFRESH MATERIALIZED VIEW global_stats"
         cur.execute(sql)
@@ -226,6 +227,7 @@ def refresh_global_stats(conn):
 
 @metrics.timer("refresh_country_stats")
 def refresh_country_stats(conn):
+    log.info("Running refresh_country_stats")
     with conn.cursor() as cur:
         sql = "REFRESH MATERIALIZED VIEW country_stats"
         cur.execute(sql)
@@ -233,6 +235,7 @@ def refresh_country_stats(conn):
 
 @metrics.timer("refresh_global_by_month")
 def refresh_global_by_month(conn):
+    log.info("Running refresh_global_by_month")
     with conn.cursor() as cur:
         sql = "REFRESH MATERIALIZED VIEW global_by_month"
         cur.execute(sql)
