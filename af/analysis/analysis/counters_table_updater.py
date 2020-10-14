@@ -103,6 +103,7 @@ def update_counters_table(conn, msm_uid_start, msm_uid_end):
         d = dict(msm_uid_start=msm_uid_start, msm_uid_end=msm_uid_end)
         cur.execute(sql, d)
         log.info("Inserted: %d", cur.rowcount)
+        metrics.gauge("update_counters_table.rowcount", cur.rowcount)
 
 
 @metrics.timer("update_counters_asn_noinput_table")
@@ -141,6 +142,7 @@ def update_counters_asn_noinput_table(conn, msm_uid_start, msm_uid_end):
         d = dict(msm_uid_start=msm_uid_start, msm_uid_end=msm_uid_end)
         cur.execute(sql, d)
         log.info("Inserted: %d", cur.rowcount)
+        metrics.gauge("update_counters_asn_noinput_table.rowcount", cur.rowcount)
 
 
 @metrics.timer("update_counters_noinput_table")
@@ -177,6 +179,7 @@ def update_counters_noinput_table(conn, msm_uid_start, msm_uid_end):
         d = dict(msm_uid_start=msm_uid_start, msm_uid_end=msm_uid_end)
         cur.execute(sql, d)
         log.info("Inserted: %d", cur.rowcount)
+        metrics.gauge("update_counters_noinput_table.rowcount", cur.rowcount)
 
 
 @metrics.timer("update_all_counters_tables")
