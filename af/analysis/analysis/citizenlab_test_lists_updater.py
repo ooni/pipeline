@@ -139,7 +139,7 @@ def rebuild_citizenlab_table_from_citizen_lab_lists(conf, conn):
         log.info("Truncating citizenlab table")
         cur.execute("TRUNCATE citizenlab")
         log.info("Inserting %d citizenlab table entries", len(test_items))
-        metrics.incr("rowcount", len(test_items))
+        metrics.gauge("rowcount", len(test_items))
         execute_values(cur, ev, test_items)
 
     if conf.dry_run:
