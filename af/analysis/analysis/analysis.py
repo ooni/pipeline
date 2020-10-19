@@ -70,7 +70,7 @@ import matplotlib.pyplot as plt
 
 from analysis.metrics import setup_metrics  # debdeps: python3-statsd
 
-from citizenlab_test_lists_updater import update_citizenlab_test_lists
+from analysis.citizenlab_test_lists_updater import update_citizenlab_test_lists
 
 from analysis.counters_table_updater import (
     update_all_counters_tables,
