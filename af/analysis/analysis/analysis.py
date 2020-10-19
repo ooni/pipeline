@@ -55,8 +55,10 @@ except ImportError:
 
 from bottle import template  # debdeps: python3-bottle
 from sqlalchemy import create_engine  # debdeps: python3-sqlalchemy-ext
-import pandas as pd  # debdeps: python3-pandas python3-jinja2
-import prometheus_client as prom  # debdeps: python3-prometheus-client
+
+# TODO: move pandas / seaborn related stuff in a dedicated script
+#import pandas as pd  # debdeps: python3-pandas python3-jinja2
+#import prometheus_client as prom  # debdeps: python3-prometheus-client
 import psycopg2  # debdeps: python3-psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -64,14 +66,17 @@ import matplotlib  # debdeps: python3-matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import seaborn as sns  # debdeps: python3-seaborn
+#import seaborn as sns  # debdeps: python3-seaborn
 
 from analysis.metrics import setup_metrics  # debdeps: python3-statsd
 
-# Imported from the fastpath package
-from fastpath import domain_input as domain_input_updater
+from citizenlab_test_lists_updater import update_citizenlab_test_lists
 
-from analysis.counters_table_updater import update_all_counters_tables, update_tables_daily
+from analysis.counters_table_updater import (
+    update_all_counters_tables,
+    update_tables_daily,
+)
+
 
 # Global conf
 conf = Namespace()
@@ -82,7 +87,6 @@ conn = None
 
 log = logging.getLogger("analysis")
 metrics = setup_metrics(name="analysis")
-
 
 
 def setup_database_connection(c):
@@ -532,8 +536,7 @@ def plot_msmt_count_per_platform_over_time(conn):
 
 @metrics.timer("plot_coverage_per_platform")
 def plot_coverage_per_platform(conn):
-    """Measure how much each platform contributes to measurements
-    """
+    """Measure how much each platform contributes to measurements"""
     log.info("COV: plot_coverage_per_platform")
     # Consider only inputs that are listed on citizenlab
     sql = "SELECT UPPER(cc), COUNT(*) from citizenlab GROUP BY cc"
@@ -585,8 +588,7 @@ def plot_coverage_per_platform(conn):
 
 
 def coverage_generator(conf):
-    """Generate statistics on coverage
-    """
+    """Generate statistics on coverage"""
     log.info("COV: Started monitor_measurement_creation thread")
     while True:
         try:
@@ -933,9 +935,19 @@ def detect_blocking():
 
 def parse_args():
     ap = ArgumentParser("Analysis script " + __doc__)
-    ap.add_argument("--update-counters", action="store_true", help="Update counters table")
-    ap.add_argument("--update-tables-daily", action="store_true", help="Run daily update")
-    #ap.add_argument("--", action="store_true", help="")
+    ap.add_argument(
+        "--update-counters", action="store_true", help="Update counters table"
+    )
+    ap.add_argument(
+        "--update-citizenlab", action="store_true", help="Update citizenlab test lists"
+    )
+    ap.add_argument(
+        "--update-tables-daily", action="store_true", help="Run daily update"
+    )
+    ap.add_argument(
+        "--dry-run", action="store_true", help="Dry run, supported only by some commands"
+    )
+    # ap.add_argument("--", action="store_true", help="")
     ap.add_argument("--devel", action="store_true", help="Devel mode")
     ap.add_argument("--stdout", action="store_true", help="Log to stdout")
     return ap.parse_args()
@@ -1230,7 +1242,7 @@ def monitor_measurement_creation(conf):
             else:
                 gauge_family.labels("replication_delay").set(delay)
 
-            #prom.write_to_textfile(nodeexp_path, prom_reg)
+            # prom.write_to_textfile(nodeexp_path, prom_reg)
 
             # The following queries are heavier
             if cycle_seconds == 0:
@@ -1263,7 +1275,7 @@ def monitor_measurement_creation(conf):
                                 f"{query_name}_{age_in_days}_days_ago"
                             ).set(val)
 
-                #prom.write_to_textfile(nodeexp_path, prom_reg)
+                # prom.write_to_textfile(nodeexp_path, prom_reg)
 
             cycle_seconds = (cycle_seconds + INTERVAL) % 3600
 
@@ -1284,8 +1296,7 @@ def monitor_measurement_creation(conf):
 
 
 def domain_input_update_runner():
-    """Runs domain_input_updater
-    """
+    """Runs domain_input_updater"""
     conf = Namespace(dry_run=False, db_uri=None)
     with metrics.timer("domain_input_updater_runtime"):
         log.info("domain_input_updater: starting")
@@ -1323,13 +1334,14 @@ def main():
     )
     os.makedirs(conf.output_directory, exist_ok=True)
 
-    #monitor_measurement_creation(conf)
-
-    #domain_input_update_runner(conf)
+    # monitor_measurement_creation(conf)
 
     try:
         if conf.update_counters:
             update_all_counters_tables(conf)
+
+        if conf.update_citizenlab:
+            update_citizenlab_test_lists(conf)
 
         if conf.update_tables_daily:
             update_tables_daily(conf)
@@ -1337,9 +1349,9 @@ def main():
     except Exception as e:
         log.error(str(e), exc_info=e)
 
-    #coverage_generator(conf)
+    # coverage_generator(conf)
 
-    #generate_slow_query_summary(conf)
+    # generate_slow_query_summary(conf)
 
     # # Update confirmed_stats table. The update is idempotent. The table is used
     # # in the next steps.
