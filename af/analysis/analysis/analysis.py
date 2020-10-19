@@ -11,17 +11,12 @@ Creates and updates unlogged tables.
 Shows confirmed correlated by country, ASN, input URL over time.
 
 Inputs: Database tables:
-    confirmed_stats
-    msm_count_by_day_by_country
     countries
-    interesting_inputs
 
 Outputs:
     Files in /var/lib/analysis
-    Node exporter / prometheus metrics
     Dedicated unlogged database tables and charts
         tables:
-            currently_blocked
 
 
 """
@@ -171,35 +166,6 @@ def query(q):
     with metrics.timer("query.unnamed"):
         r = pd.read_sql_query(q, conn)
     return r
-
-
-@metrics.timer("populate_interesting_inputs")
-def populate_interesting_inputs():
-    ## Used only once to create a persistent list of targets
-    dbengine.execute(
-        """
-        CREATE UNLOGGED TABLE interesting_inputs (
-            test_name  ootest NOT NULL ,
-            input text NOT NULL,
-            weight integer DEFAULT 1,
-            PRIMARY KEY (test_name, input)
-        )"""
-    )
-    insert_into(
-        "interesting_inputs",
-        """
-        INSERT INTO interesting_inputs
-        SELECT
-            test_name,
-            input,
-        COUNT(*) as cnt
-        FROM measurement
-        JOIN input ON input.input_no = measurement.input_no
-        JOIN report ON report.report_no = measurement.report_no
-        WHERE measurement_start_time > current_date - interval '2 days'
-        GROUP BY test_name, input
-    """,
-    )
 
 
 @metrics.timer("populate_countries")
@@ -491,64 +457,61 @@ def coverage_variance():
     ## Total number of datapoints and variance across countries per day
 
 
-# TODO: drop interesting_inputs table
-
-
-@metrics.timer("summarize_core_density")
-def summarize_core_density_UNUSED():
-    ## Core density
-    ## Measure coverage of citizenlab inputs on well-monitored countries
-    core = query(
-        """
-    SELECT
-    date_trunc('day', measurement_start_time) as day,
-    probe_cc,
-    concat(test_name, '::', input) as target,
-    COUNT(*) as msm_count
-    FROM measurement
-    JOIN report ON report.report_no = measurement.report_no
-    JOIN input ON input.input_no = measurement.input_no
-    WHERE measurement_start_time >= current_date - interval '2 days'
-    AND measurement_start_time < current_date - interval '1 days'
-    AND (test_name, input) IN (
-    SELECT
-        test_name,
-        input
-    FROM interesting_inputs
-    )
-    AND probe_cc IN (
-    SELECT
-        probe_cc
-    FROM
-        countries
-    WHERE
-        msm_count > 2000
-    )
-    GROUP BY
-    probe_cc,
-    day,
-    target
-    """
-    )
-
-    day_slice = core.pivot_table(
-        index="probe_cc", columns="target", values="msm_count", fill_value=0
-    )
-
-    log.info("Countries: ", day_slice.shape[0], "Targets:", day_slice.shape[1])
-    metrics.gauge("countries_with_high_msm_count_1_day", day_slice.shape[0])
-    metrics.gauge("targets_high_msm_countries_1_day", day_slice.shape[1])
-
-    area = day_slice.shape[0] * day_slice.shape[1]
-    log.info("Slice area:", area)
-
-    c1 = core["target"].count() / area
-    log.info("Coverage-1: cells with at least one datapoint", c1)
-    metrics.gauge("coverage_1_day_1dp", c1)
-
-    c5 = core[core["msm_count"] > 5]["target"].count() / area
-    log.info("Coverage-5: cells with at least 5 datapoints", c5)
-    metrics.gauge("coverage_1_day_5dp", c1)
+# @metrics.timer("summarize_core_density")
+# def summarize_core_density_UNUSED():
+#     ## Core density
+#     ## Measure coverage of citizenlab inputs on well-monitored countries
+#     core = query(
+#         """
+#     SELECT
+#     date_trunc('day', measurement_start_time) as day,
+#     probe_cc,
+#     concat(test_name, '::', input) as target,
+#     COUNT(*) as msm_count
+#     FROM measurement
+#     JOIN report ON report.report_no = measurement.report_no
+#     JOIN input ON input.input_no = measurement.input_no
+#     WHERE measurement_start_time >= current_date - interval '2 days'
+#     AND measurement_start_time < current_date - interval '1 days'
+#     AND (test_name, input) IN (
+#     SELECT
+#         test_name,
+#         input
+#     FROM interesting_inputs
+#     )
+#     AND probe_cc IN (
+#     SELECT
+#         probe_cc
+#     FROM
+#         countries
+#     WHERE
+#         msm_count > 2000
+#     )
+#     GROUP BY
+#     probe_cc,
+#     day,
+#     target
+#     """
+#     )
+#
+#     day_slice = core.pivot_table(
+#         index="probe_cc", columns="target", values="msm_count", fill_value=0
+#     )
+#
+#     log.info("Countries: ", day_slice.shape[0], "Targets:", day_slice.shape[1])
+#     metrics.gauge("countries_with_high_msm_count_1_day", day_slice.shape[0])
+#     metrics.gauge("targets_high_msm_countries_1_day", day_slice.shape[1])
+#
+#     area = day_slice.shape[0] * day_slice.shape[1]
+#     log.info("Slice area:", area)
+#
+#     c1 = core["target"].count() / area
+#     log.info("Coverage-1: cells with at least one datapoint", c1)
+#     metrics.gauge("coverage_1_day_1dp", c1)
+#
+#     c5 = core[core["msm_count"] > 5]["target"].count() / area
+#     log.info("Coverage-5: cells with at least 5 datapoints", c5)
+#     metrics.gauge("coverage_1_day_5dp", c1)
 
 
 @metrics.timer("plot_msmt_count_per_platform_over_time")
