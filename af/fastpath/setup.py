@@ -16,6 +16,7 @@ setup(
         "fastpath=fastpath.core:main",
         "reprocessor=fastpath.reprocessor:main",
         "domain_input_updater=fastpath.domain_input:main",
+        "database_upgrade_schema=fastpath.database_upgrade_schema:main",
     ]},
     install_requires=REQUIRED,
     include_package_data=True,
