@@ -128,8 +128,8 @@ Monitor the [API](https://mon.ooni.nu/grafana/d/CkdDBscGz/ams-pg-api?orgId=1) an
 
 Follow Nginx or gunicorn logs with:
 ```bash
-sudo journalctl -f -u nginx
-sudo journalctl -f --identifier gunicorn3
+sudo journalctl -f -u nginx --no-hostname
+sudo journalctl -f --identifier gunicorn3 --no-hostname
 ```
 
 ### Fastpath runbook
