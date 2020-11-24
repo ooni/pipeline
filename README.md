@@ -126,9 +126,10 @@ TODO
 Monitor the [API](https://mon.ooni.nu/grafana/d/CkdDBscGz/ams-pg-api?orgId=1) and 
 [fastpath](https://mon.ooni.nu/grafana/d/75nnWVpMz/fastpath-ams-pg?orgId=1) dashboards.
 
-Follow Nginx or gunicorn logs with:
+Follow Nginx or API logs with:
 ```bash
 sudo journalctl -f -u nginx --no-hostname
+# The API logs contain SQL queries, exceptions etc
 sudo journalctl -f --identifier gunicorn3 --no-hostname
 ```
 
