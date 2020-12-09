@@ -17,9 +17,10 @@ You can also explore the [documentation tree](https://ooni.github.io/pipeline/)
 ## Architecture
 
 The backend infrastructure provides multiple functions:
- * Provide APIs for data consumers
- * Instruct probes on what measurements to perform
- * Receive measurements from probes, process them and store them in the database and on S3
+
+* Provide APIs for data consumers
+* Instruct probes on what measurements to perform
+* Receive measurements from probes, process them and store them in the database and on S3
 
 ## Data flow
 
