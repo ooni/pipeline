@@ -108,11 +108,13 @@ Update [database_upgrade_schema](https://github.com/ooni/pipeline/blob/master/af
 ALTER TYPE ootest ADD VALUE '<test_name>';
 ```
 
-Update [fastpath](https://github.com/ooni/pipeline/blob/master/af/fastpath/fastpath/core.py) and integ tests
+Update [fastpath](https://github.com/ooni/pipeline/blob/master/af/fastpath/fastpath/core.py)
+by adding a new test to the `score_measurement` function and adding relevant
+integration tests.
 
-Create PR
+Create a [Pull Request](https://github.com/ooni/pipeline/compare)
 
-Run fastpath manually from S3 on test stage
+Run fastpath manually from S3 on the testing stage see: [rerun fastpath manually](#rerun-fastpath-manually)
 
 Update the [api](https://github.com/ooni/api/blob/master/newapi/ooniapi/measurements.py#L491)
 
