@@ -60,7 +60,7 @@ Mounted under /api/v1/
 
 ### Private entry points
 
-Not for public consumption. Mounted under /api/_ and used exclusively by Explorer
+Not for public consumption. Mounted under `/api/_` and used exclusively by Explorer
 
 [Sources](https://github.com/ooni/api/blob/master/newapi/ooniapi/private.py)
 
@@ -69,9 +69,6 @@ Not for public consumption. Mounted under /api/_ and used exclusively by Explore
 [Documentation](af/fastpath/fastpath/core.html)
 
 ## Database
-
-
-
 
 ## Operations
 
@@ -107,7 +104,9 @@ deploy ooni-api prod
 
 Update [database_upgrade_schema](https://github.com/ooni/pipeline/blob/master/af/fastpath/database_upgrade_schema.py)
 
+```
 ALTER TYPE ootest ADD VALUE '<test_name>';
+```
 
 Update [fastpath](https://github.com/ooni/pipeline/blob/master/af/fastpath/fastpath/core.py) and integ tests
 
@@ -196,8 +195,9 @@ sudo apt-get install analysis=<version>
 ```
 
 #### Run manually
-
-`sudo systemctl restart ooni-update-counters.service`
+```
+sudo systemctl restart ooni-update-counters.service
+```
 
 #### Log monitoring
 
@@ -213,12 +213,16 @@ sudo journalctl -f --identifier analysis
 
 Deploy host from https://cloud.digitalocean.com/projects/
 
-Create DNS "A" record <name>.ooni.org at https://ap.www.namecheap.com/
+Create DNS "A" record `<name>.ooni.org` at https://ap.www.namecheap.com/
 
 On the sysadmin repo, ansible directory, add the host to the inventory
 
-Run the deploy with the root SSH user::
-  ./play deploy-<foo>.yml -l <name>.ooni.org --diff -u root
+Run the deploy with the root SSH user
+```
+./play deploy-<foo>.yml -l <name>.ooni.org --diff -u root
+```
 
-Update prometheus::
+Update prometheus
+```
 ./play deploy-prometheus.yml -t prometheus-conf --diff
+```
