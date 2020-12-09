@@ -139,7 +139,7 @@ def render_markdown(orig_source_f: Path, inp: str):
     content = markdown.markdown(
         inp,
         extensions=[
-            TocExtension(baselevel=3, permalink=True),
+            TocExtension(baselevel=3, permalink=' #'),
             CodeHiliteExtension(),
             FencedCodeExtension(),
         ],
