@@ -66,7 +66,7 @@ HTMLTPL = dedent(
         </div>
       </div>
     </div>
-    <div class="container" id="content">
+    <div class="container">
     """
 )
 
