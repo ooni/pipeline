@@ -1,3 +1,9 @@
+detector (0.3) unstable; urgency=medium
+
+  * update detector for fastpath
+
+ -- Federico Ceratto <federico@debian.org>  Thu, 28 Jan 2021 13:29:01 +0000
+
 detector (0.2) unstable; urgency=medium
 
   * run webapp as a dedicated service
