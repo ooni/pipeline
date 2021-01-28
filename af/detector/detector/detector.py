@@ -54,6 +54,7 @@ import pickle
 import select
 import signal
 import sys
+import time
 
 from systemd.journal import JournalHandler  # debdeps: python3-systemd
 import psycopg2  # debdeps: python3-psycopg2
@@ -75,7 +76,7 @@ DB_PASSWORD = "yEqgNr2eXvgG255iEBxVeP"  # This is already made public
 RO_DB_USER = "amsapi"
 RO_DB_PASSWORD = "b2HUU6gKM19SvXzXJCzpUV"  # This is already made public
 
-DEFAULT_STARTTIME = datetime(2016, 1, 1)
+DEFAULT_STARTTIME = datetime(2019, 1, 1)
 
 BASEURL = "http://fastpath.ooni.nu:8080"
 WEBAPP_URL = BASEURL + "/webapp"
@@ -91,42 +92,20 @@ psycopg2.extras.register_default_json(loads=ujson.loads, globally=True)
 
 
 def fetch_past_data(conn, start_date):
-    """Fetch past data in large chunks ordered by measurement_start_time
-    """
+    """Fetch past data in large chunks ordered by measurement_start_time"""
     q = """
-    SELECT
-        coalesce(false) as anomaly,
-        coalesce(false) as confirmed,
-        input,
-        measurement_start_time,
-        probe_cc,
-        scores::text,
-        coalesce('') as report_id,
-        test_name,
-        tid
-    FROM fastpath
-    WHERE measurement_start_time >= %(start_date)s
-    AND measurement_start_time < %(end_date)s
-
-    UNION
-
     SELECT
         anomaly,
         confirmed,
         input,
         measurement_start_time,
         probe_cc,
-        coalesce('') as scores,
+        scores::text,
         report_id,
-        test_name,
-        coalesce('') as tid
-
-    FROM measurement
-    JOIN report ON report.report_no = measurement.report_no
-    JOIN input ON input.input_no = measurement.input_no
-    WHERE measurement_start_time >= %(start_date)s
+        measurement_uid
+    FROM fastpath
+    WHERE measurement_start_time > %(start_date)s
     AND measurement_start_time < %(end_date)s
-    ORDER BY measurement_start_time
     """
     assert start_date
 
@@ -143,13 +122,23 @@ def fetch_past_data(conn, start_date):
                 log.info("Last run")
             log.info("Query from %s to %s", start_date, end_date)
             p = dict(start_date=str(start_date), end_date=str(end_date))
+            t0 = time.monotonic()
             cur.execute(q, p)
+            query_runtime = time.monotonic() - t0
+            log.info("Query time %.3f", query_runtime)
             while True:
                 # Iterate across chunks of rows
                 rows = cur.fetchmany(chunk_size)
                 if not rows:
                     break
-                log.info("Fetched msmt chunk of size %d", len(rows))
+                first_date = rows[0]["measurement_start_time"]
+                last_date = rows[-1]["measurement_start_time"]
+                log.info(
+                    f"Fetched msmt chunk of size %d from %s to %s",
+                    len(rows),
+                    first_date,
+                    last_date,
+                )
                 for r in rows:
                     d = dict(r)
                     if d["scores"]:
@@ -165,47 +154,22 @@ def fetch_past_data(conn, start_date):
 
 
 def fetch_past_data_selective(conn, start_date, cc, test_name, inp):
-    """Fetch past data in large chunks
-    """
+    """Fetch past data in large chunks"""
     chunk_size = 200_000
     q = """
     SELECT
-        coalesce(false) as anomaly,
-        coalesce(false) as confirmed,
         input,
         measurement_start_time,
         probe_cc,
         probe_asn,
         scores::text,
         test_name,
-        tid
+        measurement_uid
     FROM fastpath
     WHERE measurement_start_time >= %(start_date)s
     AND probe_cc = %(cc)s
     AND test_name = %(test_name)s
     AND input = %(inp)s
-
-    UNION
-
-    SELECT
-        anomaly,
-        confirmed,
-        input,
-        measurement_start_time,
-        probe_cc,
-        probe_asn,
-        coalesce('') as scores,
-        test_name,
-        coalesce('') as tid
-
-    FROM measurement
-    JOIN report ON report.report_no = measurement.report_no
-    JOIN input ON input.input_no = measurement.input_no
-    WHERE measurement_start_time >= %(start_date)s
-    AND probe_cc = %(cc)s
-    AND test_name = %(test_name)s
-    AND input = %(inp)s
-
     ORDER BY measurement_start_time
     """
     p = dict(cc=cc, inp=inp, start_date=start_date, test_name=test_name)
@@ -225,53 +189,37 @@ def fetch_past_data_selective(conn, start_date, cc, test_name, inp):
                 yield d
 
 
-def backfill_scores(d):
-    """Generate scores dict for measurements from the traditional pipeline
-    """
-    if d.get("scores", None):
-        return
-    b = (
-        scoring.anomaly
-        if d["anomaly"]
-        else 0 + scoring.confirmed
-        if d["confirmed"]
-        else 0
-    )
-    d["scores"] = dict(blocking_general=b)
-
-
-def detect_blocking_changes_1s_g(g, cc, test_name, inp, start_date):
-    """Used by webapp
-    :returns: (msmts, changes)
-    """
-    means = {}
-    msmts = []
-    changes = []
-
-    for msm in g:
-        backfill_scores(msm)
-        k = (msm["probe_cc"], msm["test_name"], msm["input"])
-        assert isinstance(msm["scores"], dict), repr(msm["scores"])
-        change = detect_blocking_changes(means, msm, warmup=True)
-        date, mean, bblocked = means[k]
-        val = msm["scores"]["blocking_general"]
-        if change:
-            changes.append(change)
-
-        msmts.append((date, val, mean))
-
-    log.debug("%d msmts processed", len(msmts))
-    assert isinstance(msmts[0][0], datetime)
-    return (msmts, changes)
-
-
-def detect_blocking_changes_one_stream(conn, cc, test_name, inp, start_date):
-    """Used by webapp
-    :returns: (msmts, changes)
-    """
-    # TODO: move into webapp?
-    g = fetch_past_data_selective(conn, start_date, cc, test_name, inp)
-    return detect_blocking_changes_1s_g(g, cc, test_name, inp, start_date)
+# def detect_blocking_changes_1s_g(g, cc, test_name, inp, start_date):
+#     """Used by webapp
+#     :returns: (msmts, changes)
+#     """
+#     means = {}
+#     msmts = []
+#     changes = []
+#
+#     for msm in g:
+#         k = (msm["probe_cc"], msm["test_name"], msm["input"])
+#         assert isinstance(msm["scores"], dict), repr(msm["scores"])
+#         change = detect_blocking_changes(means, msm, warmup=True)
+#         date, mean, bblocked = means[k]
+#         val = msm["scores"]["blocking_general"]
+#         if change:
+#             changes.append(change)
+#
+#         msmts.append((date, val, mean))
+#
+#     log.debug("%d msmts processed", len(msmts))
+#     assert isinstance(msmts[0][0], datetime)
+#     return (msmts, changes)
+#
+#
+# def detect_blocking_changes_one_stream(conn, cc, test_name, inp, start_date):
+#     """Used by webapp
+#     :returns: (msmts, changes)
+#     """
+#     # TODO: move into webapp?
+#     g = fetch_past_data_selective(conn, start_date, cc, test_name, inp)
+#     return detect_blocking_changes_1s_g(g, cc, test_name, inp, start_date)
 
 
 def load_asn_db():
@@ -297,8 +245,7 @@ def load_asn_db():
 
 
 def prevent_future_date(msm):
-    """If the msmt time is in the future replace it with utcnow
-    """
+    """If the msmt time is in the future replace it with utcnow"""
     # Timestamp are untrusted as they are generated by the probes
     # This makes the process non-deterministic and non-reproducible
     # but we can run unit tests against good inputs or mock utctime
@@ -324,8 +271,7 @@ def detect_blocking_changes_asn_one_stream(conn, cc, test_name, inp, start_date)
     asn_breakdown = {}
 
     for msm in g:
-        backfill_scores(msm)
-        prevent_future_date(msm)
+        # prevent_future_date(msm)
         k = (msm["probe_cc"], msm["test_name"], msm["input"])
         assert isinstance(msm["scores"], dict), repr(msm["scores"])
         change = detect_blocking_changes(means, msm, warmup=True)
@@ -364,12 +310,16 @@ Change = namedtuple(
         "blocked",
         "mean",
         "measurement_start_time",
-        "tid",
+        "measurement_uid",
         "report_id",
     ],
 )
 
-MeanStatus = namedtuple("MeanStatus", ["measurement_start_time", "val", "blocked"])
+
+MeanStatus = namedtuple(
+    "MeanStatus", ["measurement_start_time", "count", "val", "blocked"]
+)
+history = {}
 
 
 def detect_blocking_changes(means: dict, msm: dict, warmup=False):
@@ -377,7 +327,7 @@ def detect_blocking_changes(means: dict, msm: dict, warmup=False):
     :returns: Change or None
     """
     # TODO: move out params
-    upper_limit = 0.10
+    upper_limit = 0.15
     lower_limit = 0.05
     # P: averaging value
     # p=1: no averaging
@@ -393,8 +343,10 @@ def detect_blocking_changes(means: dict, msm: dict, warmup=False):
         log.debug("odd input")
         return
 
+    if "test_name" not in msm:
+        return
+
     k = (msm["probe_cc"], msm["test_name"], inp)
-    tid = msm.get("tid", None)
     report_id = msm.get("report_id", None) or None
 
     assert isinstance(msm["scores"], dict), repr(msm["scores"])
@@ -405,7 +357,7 @@ def detect_blocking_changes(means: dict, msm: dict, warmup=False):
     if k not in means:
         # cc/test_name/input tuple never seen before
         blocked = blocking_general > upper_limit
-        means[k] = MeanStatus(measurement_start_time, blocking_general, blocked)
+        means[k] = MeanStatus(measurement_start_time, 1, blocking_general, blocked)
         if blocked:
             if not warmup:
                 log.info("%r new and blocked", k)
@@ -418,7 +370,7 @@ def detect_blocking_changes(means: dict, msm: dict, warmup=False):
                 probe_cc=msm["probe_cc"],
                 input=msm["input"],
                 test_name=msm["test_name"],
-                tid=tid,
+                measurement_uid=msm["measurement_uid"],
                 report_id=report_id,
             )
 
@@ -431,11 +383,15 @@ def detect_blocking_changes(means: dict, msm: dict, warmup=False):
     # TODO: average weighting by time delta; add timestamp to status and means
     # TODO: record msm leading to status change
     new_val = (1 - p) * old.val + p * blocking_general
-    means[k] = MeanStatus(measurement_start_time, new_val, old.blocked)
 
     if old.blocked and new_val < lower_limit:
-        # blocking cleared
-        means[k] = MeanStatus(measurement_start_time, new_val, False)
+        # an existent blocking has been cleared
+        means[k] = MeanStatus(measurement_start_time, old.count + 1, new_val, False)
+        log.info("CLEAR %r %d", k, old.count + 1)
+        if k == ("US", "web_connectivity", "https://identi.ca/"):
+            for hi in history[k]:
+                log.info("%s %d %d", str(hi[0]), int(hi[1] * 100), hi[2])
+
         if not warmup:
             log.info("%r cleared %.2f", k, new_val)
             metrics.incr("detected_cleared")
@@ -447,12 +403,19 @@ def detect_blocking_changes(means: dict, msm: dict, warmup=False):
             probe_cc=msm["probe_cc"],
             input=msm["input"],
             test_name=msm["test_name"],
-            tid=tid,
+            measurement_uid=msm["measurement_uid"],
             report_id=report_id,
         )
 
-    if not old.blocked and new_val > upper_limit:
-        means[k] = MeanStatus(measurement_start_time, new_val, True)
+    elif not old.blocked and new_val > upper_limit:
+        # a new blocking
+        # log.info("BLOCK")
+        # log.info(tuple(int(q * 100) for q in history[k]))
+        log.info("BLOCKED %r %d", k, old.count + 1)
+        if k == ("US", "web_connectivity", "https://identi.ca/"):
+            for hi in history[k]:
+                log.info("%s %d %d", str(hi[0]), int(hi[1] * 100), hi[2])
+        means[k] = MeanStatus(measurement_start_time, old.count + 1, new_val, True)
         if not warmup:
             log.info("%r blocked %.2f", k, new_val)
             metrics.incr("detected_blocked")
@@ -464,9 +427,18 @@ def detect_blocking_changes(means: dict, msm: dict, warmup=False):
             probe_cc=msm["probe_cc"],
             input=msm["input"],
             test_name=msm["test_name"],
-            tid=tid,
+            measurement_uid=msm["measurement_uid"],
             report_id=report_id,
         )
+
+    else:
+        means[k] = MeanStatus(
+            measurement_start_time, old.count + 1, new_val, old.blocked
+        )
+
+    new = means[k]
+    hi = (msm["measurement_start_time"], new.val, new.blocked)
+    history.setdefault(k, []).append(hi)
 
 
 def parse_date(d):
@@ -474,8 +446,7 @@ def parse_date(d):
 
 
 def setup_dirs(conf, root):
-    """Setup directories, creating them if needed
-    """
+    """Setup directories, creating them if needed"""
     conf.vardir = root / "var/lib/detector"
     conf.outdir = conf.vardir / "output"
     conf.rssdir = conf.outdir / "rss"
@@ -507,9 +478,7 @@ def setup():
     ap.add_argument("--webapp", action="store_true", help="Run webapp")
     ap.add_argument("--start-date", type=lambda d: parse_date(d))
     ap.add_argument("--db-host", default=None, help="Database hostname")
-    ap.add_argument(
-        "--ro-db-host", default=None, help="Read-only database hostname"
-    )
+    ap.add_argument("--ro-db-host", default=None, help="Read-only database hostname")
     conf = ap.parse_args()
     if conf.devel:
         format = "%(relativeCreated)d %(process)d %(levelname)s %(name)s %(message)s"
@@ -518,10 +487,9 @@ def setup():
         log.addHandler(JournalHandler(SYSLOG_IDENTIFIER="detector"))
         log.setLevel(logging.DEBUG)
 
-
     # Run inside current directory in devel mode
     root = Path(os.getcwd()) if conf.devel else Path("/")
-    conf.conffile = root / "etc/detector.conf"
+    conf.conffile = root / "etc/ooni/detector.conf"
     log.info("Using conf file %r", conf.conffile.as_posix())
     cp = ConfigParser()
     with open(conf.conffile) as f:
@@ -558,8 +526,7 @@ def connect_to_db(db_host, db_user, db_name, db_password):
 
 
 def snapshot_means(msm, last_snapshot_date, means):
-    """Save means to disk every month
-    """
+    """Save means to disk every month"""
     # TODO: add config parameter to recompute past data
     t = msm["measurement_start_time"]
     month = date(t.year, t.month, 1)
@@ -572,8 +539,7 @@ def snapshot_means(msm, last_snapshot_date, means):
 
 
 def process_historical_data(ro_conn, rw_conn, start_date, means):
-    """Process past data
-    """
+    """Process past data"""
     assert start_date
     log.info("Running process_historical_data from %s", start_date)
     t = metrics.timer("process_historical_data").start()
@@ -581,8 +547,7 @@ def process_historical_data(ro_conn, rw_conn, start_date, means):
     # fetch_past_data returns measurements ordered by measurement_start_time
     last_snap = None
     for past_msm in fetch_past_data(ro_conn, start_date):
-        backfill_scores(past_msm)
-        prevent_future_date(past_msm)
+        # prevent_future_date(past_msm)
         last_snap = snapshot_means(past_msm, last_snap, means)
         change = detect_blocking_changes(means, past_msm, warmup=True)
         cnt += 1
@@ -749,11 +714,10 @@ def update_status_files(blocking_events):
 
 @metrics.timer("upsert_change")
 def upsert_change(change):
-    """Create / update RSS and JSON files with a new change
-    """
+    """Create / update RSS and JSON files with a new change"""
     # Create DB tables in future if needed
     debug_url = create_url(change)
-    log.info("Change! %r %r", change, debug_url)
+    # FIXME log.info("Change! %r %r", change, debug_url)
     if not change.report_id:
         log.error("Empty report_id")
         return
@@ -818,8 +782,7 @@ def load_means():
 
 
 def save_means(means, date):
-    """Save means atomically. Protocol 4
-    """
+    """Save means atomically. Protocol 4"""
     tstamp = date.strftime(".%Y-%m-%d") if date else ""
     pf = conf.pickledir / f"means{tstamp}.pkl"
     pft = pf.with_suffix(".tmp")
@@ -842,8 +805,7 @@ def save_means(means, date):
 
 
 def load_country_name_map():
-    """Load country-list.json and create a lookup dictionary
-    """
+    """Load country-list.json and create a lookup dictionary"""
     fi = f"{PKGDIR}/detector/data/country-list.json"
     log.info("Loading %s", fi)
     with open(fi) as f:
@@ -906,9 +868,8 @@ def main():
     save_means(means, None)
 
     log.info("Starting real-time processing")
-    with rw_conn.cursor() as cur:
-        cur.execute("LISTEN fastpath;")
 
+    return  # FIXME
     while True:
         if select.select([rw_conn], [], [], 60) == ([], [], []):
             continue  # timeout
