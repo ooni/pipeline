@@ -48,12 +48,12 @@ URL_BAD_CHARS = {"\r", "\n", "\t", "\\"}
 
 # FIXME: temporarily hardcoded here for backend#361
 PRIORITIES = {
+    "GRP": 120,
     "NEWS": 100,
     "POLR": 100,
     "HUMR": 100,
     "LGBT": 100,
     "ANON": 100,
-    "GRP": 80,
     "COMT": 80,
     "MMED": 80,
     "SRCH": 80,
@@ -67,12 +67,12 @@ PRIORITIES = {
     "IGO": 40,
     "GOVT": 40,
     "DATE": 30,
-    "HATE": 30,
     "MILX": 30,
     "PROV": 30,
     "PORN": 30,
     "GMB": 30,
     "ALDR": 30,
+    "HATE": 20,
     "GAME": 20,
     "MISC": 20,
     "HACK": 20,
