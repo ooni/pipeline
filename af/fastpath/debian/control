@@ -12,7 +12,8 @@ Build-Depends: debhelper-compat (= 12),
  python3-setuptools,
  python3-statsd,
  python3-systemd,
- python3-ujson
+ python3-ujson,
+ python3-yaml
 Standards-Version: 4.1.3
 
 Package: fastpath
@@ -26,6 +27,7 @@ Depends: ${misc:Depends},
  python3-statsd,
  python3-systemd,
  python3-ujson,
+ python3-yaml,
  nginx
 Suggests:
  bpython3,
