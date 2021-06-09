@@ -20,7 +20,6 @@ import sys
 import time
 
 import psycopg2  # debdeps: python3-psycopg2
-from psycopg2.extras import execute_values
 import statsd  # debdeps: python3-statsd
 import digitalocean  # debdeps: python3-digitalocean
 
@@ -31,6 +30,7 @@ log.addHandler(logging.StreamHandler())  # Writes to console
 log.setLevel(logging.DEBUG)
 
 conffile_path = "/etc/ooni/rotation.conf"
+setup_script_path = "/etc/ooni/rotation_setup.sh"
 TAG = "roaming-th"
 
 
@@ -68,6 +68,8 @@ def spawn_new_droplet(api, dig_oc_token, live_regions, conf):
     assert img
     size_slug = conf["size_slug"]
     assert size_slug
+    with open(setup_script_path) as f:
+        user_data = f.read()
     droplet = digitalocean.Droplet(
         backups=False,
         image=img,
@@ -76,6 +78,7 @@ def spawn_new_droplet(api, dig_oc_token, live_regions, conf):
         size_slug=size_slug,
         ssh_keys=ssh_keys,
         token=dig_oc_token,
+        user_data=user_data,
         ipv6=True,
         tags=[
             TAG,
@@ -89,7 +92,6 @@ def spawn_new_droplet(api, dig_oc_token, live_regions, conf):
         for action in droplet.get_actions():
             action.load()
             if action.status == "completed":
-                log.info(f"Droplet ready")
                 return api.get_droplet(droplet.id)
 
         log.debug("Waiting for droplet to start")
@@ -142,6 +144,7 @@ def main():
         live_regions = set(d.region["slug"] for d in droplets)
         db_conn = psycopg2.connect(conf["db_uri"])
         droplet = spawn_new_droplet(api, dig_oc_token, live_regions, conf)
+        log.info(f"Droplet {droplet.name} ready at {droplet.ip_address}")
         add_droplet_to_db_table(db_conn, droplet)
 
     if len(live_droplets) > live_droplets_count:
