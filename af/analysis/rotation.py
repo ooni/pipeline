@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """
+Spaws and rotates hosts on Digital Ocean. Runs a setup script on the host
+at first boot.
 Reads /etc/ooni/rotation.conf
+Keeps a list of live hosts in a dedicated db table.
+Runs as a SystedD timer.
 
+Table setup:
 CREATE UNLOGGED TABLE test_helper_instances (
     name text NOT NULL,
     provider text NOT NULL,
@@ -10,6 +15,21 @@ CREATE UNLOGGED TABLE test_helper_instances (
     ipv6addr inet
 );
 ALTER TABLE test_helper_instances OWNER TO shovel;
+
+Example for /etc/ooni/rotation.conf
+--
+[DEFAULT]
+token = CHANGEME
+db_uri = postgresql://shovel:CHANGEME@localhost/metadb
+live_droplets_count = 4
+size_slug = s-1vcpu-1gb
+image_name = debian-10-x64
+--
+
+Example for /etc/ooni/rotation_setup.sh
+--
+--
+
 """
 
 from configparser import ConfigParser
