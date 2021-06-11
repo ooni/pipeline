@@ -25,6 +25,7 @@ db_uri = postgresql://shovel:CHANGEME@localhost/metadb
 active_droplets_count = 4
 size_slug = s-1vcpu-1gb
 image_name = debian-10-x64
+draining_time_minutes = 240
 --
 
 Example for /etc/ooni/rotation_setup.sh
@@ -57,7 +58,7 @@ import digitalocean  # debdeps: python3-digitalocean
 
 metrics = statsd.StatsClient("127.0.0.1", 8125, prefix="rotation")
 
-log = logging.getLogger("reprocessor")
+log = logging.getLogger("rotation")
 log.addHandler(logging.StreamHandler())  # Writes to console
 log.setLevel(logging.DEBUG)
 
