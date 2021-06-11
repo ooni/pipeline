@@ -111,7 +111,9 @@ def destroy_drained_droplets(db_conn, api, draining_time_minutes, live_droplets)
         cur.execute(q, v)
         oldest = cur.fetchone()
 
-    if oldest is None:
+    if oldest:
+        oldest = oldest[0]
+    else:
         log.info("No droplet to destroy")
         return
 
