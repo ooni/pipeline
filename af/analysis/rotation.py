@@ -241,18 +241,20 @@ def drain_droplet_if_needed(db_conn, live_droplets, active_droplets_count):
         drain_droplet_in_db_table(db_conn, oldest)
 
 
+@metrics.timer("create_le_do_ssl_cert")
 def create_le_do_ssl_cert():
-    """Create Let's Encrypt SSL Certificate through the Digital Ocean API
+    """Create/renew Let's Encrypt SSL Certificate through the Digital Ocean API
 
-    Namecheap DNS entry:
+    Namecheap DNS entry to delegate to DO:
         th.ooni.org
             NS  ns1.digitalocean.com
             NS  ns2.digitalocean.com
             NS  ns3.digitalocean.com
 
+    On Digital Ocean, creates a wildcard cert for *.th.ooni.org using DNS
     """
+    # TODO create_le_do_ssl_cert only if needed
     # debdeps: certbot python3-certbot-dns-digitalocean
-
     cmd = [
         "certbot",
         "certonly",
@@ -262,6 +264,9 @@ def create_le_do_ssl_cert():
         "-d",
         "'*.th.ooni.org'",
     ]
+    log.info("Creating/refreshing wildcard certificate *.th.ooni.org")
+    log.info(" ".join(cmd))
+    check_output(cmd)
 
 
 @metrics.timer("scp_file")
@@ -422,8 +427,7 @@ def main():
     add_droplet_to_db_table(db_conn, new_droplet)
     live_droplets.append(new_droplet)
 
-    # create_le_do_ssl_cert()
-    # TODO create_le_do_ssl_cert only if needed
+    create_le_do_ssl_cert()
     # Deploy SSL certificate to new droplet
     deploy_ssl_cert(f"root@{new_droplet.ip_address}", dns_zone)
 
