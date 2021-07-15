@@ -266,6 +266,7 @@ def process_measurements_from_s3():
     else:
         db.setup(conf)
 
+    cnt = 0
     for measurement_tup in s3feeder.stream_cans(conf, conf.start_day, conf.end_day):
         assert measurement_tup is not None
         assert len(measurement_tup) == 3
@@ -273,6 +274,9 @@ def process_measurements_from_s3():
         assert msm_jstr is None or isinstance(msm_jstr, (str, bytes)), type(msm_jstr)
         assert msm is None or isinstance(msm, dict)
         process_measurement(measurement_tup)
+        cnt += 1
+        if conf.stop_after and cnt >= conf.stop_after:
+            return
 
 
 @metrics.timer("match_fingerprints")
