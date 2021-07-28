@@ -1252,7 +1252,7 @@ def score_signal(msm) -> dict:
 
 
 def score_torsf(msm) -> dict:
-    """Calculate measurement scoring for Tor pluggable transports "torsf"
+    """Calculate measurement scoring for Tor Snowflake
     Returns a scores dict
     """
     # https://github.com/ooni/ooni.org/issues/772
