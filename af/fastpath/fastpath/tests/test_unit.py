@@ -217,6 +217,21 @@ def test_score_torsf():
     }
 
 
+def test_score_torsf2():
+    fn = "fastpath/tests/data/torsf_2.json"
+    with open(fn) as f:
+        msm = ujson.load(f)
+    scores = fp.score_measurement(msm)
+    assert scores == {
+        "blocking_country": 0.0,
+        "blocking_general": 0.0,
+        "blocking_global": 0.0,
+        "blocking_isp": 0.0,
+        "blocking_local": 0.0,
+        "extra": {"bootstrap_time": 78.980935917},
+    }
+
+
 # # Bug tests
 
 
