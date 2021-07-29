@@ -1260,7 +1260,7 @@ def score_torsf(msm) -> dict:
     tk = msm.get("test_keys", {})
     failure = tk.get("failure")
     if failure:
-        scores["accuracy"] = 0.0
+        scores["blocking_general"] = 1.0
         return scores
 
     scores["extra"] = dict(bootstrap_time=tk.get("bootstrap_time"))

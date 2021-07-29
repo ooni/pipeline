@@ -208,9 +208,8 @@ def test_score_torsf():
         msm = ujson.load(f)
     scores = fp.score_measurement(msm)
     assert scores == {
-        "accuracy": 0.0,
         "blocking_country": 0.0,
-        "blocking_general": 0.0,
+        "blocking_general": 1.0,
         "blocking_global": 0.0,
         "blocking_isp": 0.0,
         "blocking_local": 0.0,
