@@ -162,6 +162,7 @@ def spawn_new_droplet(api, dig_oc_token, live_regions, conf):
     preferred_regions = regions - live_regions
 
     ssh_keys = api.get_all_sshkeys()
+    # log.debug(ssh_keys)
     img = conf["image_name"]
     assert img
     size_slug = conf["size_slug"]
@@ -262,7 +263,8 @@ def create_le_do_ssl_cert():
         "--dns-digitalocean-credentials",
         certbot_creds,
         "-d",
-        "'*.th.ooni.org'",
+        "*.th.ooni.org",
+        "-n"
     ]
     log.info("Creating/refreshing wildcard certificate *.th.ooni.org")
     log.info(" ".join(cmd))
@@ -401,7 +403,7 @@ def main():
         assert TAG in d.tags
     live_droplets = [d for d in droplets if d.status == "active"]
     log.info(f"{len(droplets)} droplets")
-    log.info(f"{len(live_droplets)} powered on droplets")
+    log.info(f"{len(live_droplets)} live droplets")
 
     # Avoid failure modes where we destroy all VMs or create unlimited amounts
     # or churn too quickly
@@ -413,7 +415,7 @@ def main():
     drain_droplet_if_needed(db_conn, live_droplets, active_droplets_count)
 
     if len(live_droplets) > active_droplets_count:
-        log.info("No need to spawn a new droplet")
+        log.info(f"No need to spawn a new droplet {len(live_droplets)} > {active_droplets_count}")
         sys.exit(0)
 
     if len(droplets) > active_droplets_count + 2:
