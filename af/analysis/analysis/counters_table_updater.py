@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 
 import logging
 
-import lockfile
+from filelock import FileLock  # debdeps: python3-filelock
 import psycopg2
 
 from analysis.metrics import setup_metrics
@@ -281,9 +281,8 @@ def update_all_counters_tables(conf):
     log.info("Started update_all_counters_tables")
     metrics.gauge("update_all_counters_tables.running", 1)
 
-    lock_fn = conf.output_directory / "counters_table_updater.lock"
-    lock = lockfile.FileLock(lock_fn.as_posix(), timeout=30)
-    with lock:
+    lock_f = conf.output_directory / "counters_table_updater.lock"
+    with FileLock(lock_f, timeout=30):
         fn = conf.output_directory / "counters_table_updater.last_msm_uid_end"
         # Start from the last msm uid in the previous run
         try:
