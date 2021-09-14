@@ -144,12 +144,9 @@ def minicans(test_name, start_date: date, end_date: date, end=None):
     day = start_date
     file_cnt = 0
     while day <= end_date:
-        li = s3feeder.list_minicans_on_s3_for_a_day(s3, day)
+        tn_filter = set([test_name.replace("_", "")])
+        li = s3feeder.list_minicans_on_s3_for_a_day(s3, day, None, tn_filter)
         for s3fname, s3size in li:
-            ctn = test_name.replace("_", "")
-            if f"/{ctn}/2" not in s3fname:
-                continue  # skip unwanted test names
-
             # s3fname: raw/20210426/23/YE/ndt/2021042623_YE_ndt.n0.0.tar.gz
             local_file = Path("testdata") / "mini" / s3fname
             in_cache = local_file.is_file() and (local_file.stat().st_size == s3size)
@@ -620,6 +617,39 @@ def test_score_tor():
         # TODO: review tests
         break
 
+# # test_name: http_requests
+
+def test_score_http_requests():
+    cnt = 0
+    for can_fn, msm in s3msmts("http_requests", date(2016, 12, 29), date(2016, 12, 29)):
+        assert msm["test_name"] == "http_requests"
+        erid = "20161225T225955Z_AS200938_ffNnCYb1F8ih0MnomQro2ktalI7d8KnHGwQUXs0ZaqbQHTxBG1"
+        erid = "20161225T025526Z_AS200938_FAmaY6pHD0AoFH5DO9I9ppLP1TGnVMkrXszEUc0N7msaGcEUgt"
+        skip = [
+            "XA4JPdyzcoVgo0tWp6xzcBmxxwBGW92uR8rYdxk4843IMeA3iPgBJZ0Y5cqoIMvN",
+            "CkXZQnaB77inMBE161Mnh0VDPAJYRioSRzXVX8QMNdiFyfCdMMDod9X5MGmsbd20",
+            "CkXZQnaB77inMBE161Mnh0VDPAJYRioSRzXVX8QMNdiFyfCdMMDod9X5MGmsbd20",
+        ]
+        rid = msm["report_id"]
+        if rid in skip:
+            continue
+        #if rid != erid:
+        #    continue
+        cnt +=1
+        if cnt > 3000:
+            break
+        print(rid)
+
+        scores = fp.score_measurement(msm)
+
+        if rid == "20200601T000014Z_AS8339_RC9uUMBtq5AkMLx6xDtTxEciPvd171jQaYx1i3dDbhH27PemEx":
+            assert scores == {
+                "blocking_general": 0.05714285714285714,
+                "blocking_global": 0.0,
+                "blocking_country": 0.0,
+                "blocking_isp": 0.0,
+                "blocking_local": 0.0,
+            }
 
 ## test_name: web_connectivity
 

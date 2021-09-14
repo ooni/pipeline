@@ -10,7 +10,7 @@ AWS_PROFILE=ooni-data aws s3 ls s3://ooni-data/canned/2019-07-16/
 """
 
 from datetime import date, timedelta
-from typing import Generator
+from typing import Generator, Set
 from pathlib import Path
 import logging
 import os
@@ -140,8 +140,10 @@ def list_cans_on_s3_for_a_day(s3, day: date):
     return files
 
 
-def list_minicans_on_s3_for_a_day(s3, day: date) -> list:
-    """List minicans."""
+def list_minicans_on_s3_for_a_day(
+    s3, day: date, ccs: Set[str], testnames: Set[str]
+) -> list:
+    """List minicans. Filter them by CCs and testnames"""
     # s3cmd ls s3://ooni-data-eu-fra/raw/20210202
     tstamp = day.strftime("%Y%m%d")
     prefix = f"raw/{tstamp}/"
@@ -158,11 +160,30 @@ def list_minicans_on_s3_for_a_day(s3, day: date) -> list:
             log.warn("%d minican files found!", len(r.get("Contents", [])))
 
         for f in r.get("Contents", []):
-            if f["Key"].endswith(".tar.gz"):
-                files.append((f["Key"], f["Size"]))
+            if not f["Key"].endswith(".tar.gz"):
+                continue
+
+            # Example:
+            # raw/20210910/02/CU/signal/2021091002_CU_signal.n0.0.tar.gz
+            fname = f["Key"]
+            try:
+                _raw, _date, _hour, cc, testname, _ = fname.split("/")
+            except:
+                log.warn(f"Ignoring unexpected minican filename {fname}")
+
+            if ccs and cc not in ccs:
+                continue
+
+            if testnames and testname not in testnames:
+                continue
+
+            files.append((fname, f["Size"]))
 
         if cont_token is None:
-            return files
+            log.info(f"Found {len(files)} minican .tar.gz files")
+            return sorted(files)
+
+    assert False
 
 
 @metrics.timer("fetch_cans")
@@ -200,6 +221,7 @@ def fetch_cans(s3, conf, files) -> Generator[Path, None, None]:
         except ZeroDivisionError:
             pass
 
+    cans = sorted(cans)
     _cb.total_size = sum(t[2] for t in cans if t[3])
     _cb.total_count = 0
 
@@ -261,7 +283,6 @@ def _update_eta(t0, start_day, day, stop_day, can_num, can_tot_count):
 
 def stream_cans(conf, start_day: date, end_day: date) -> Generator[MsmtTup, None, None]:
     """Stream cans from S3"""
-    # TODO: implement new postcan format as well
     today = date.today()
     if not start_day or start_day >= today:
         return
@@ -275,12 +296,12 @@ def stream_cans(conf, start_day: date, end_day: date) -> Generator[MsmtTup, None
     while day < stop_day:
         log.info("Processing day %s", day)
         cans_fns = list_cans_on_s3_for_a_day(s3, day)
-        minicans_fns = list_minicans_on_s3_for_a_day(s3, day)
+        minicans_fns = list_minicans_on_s3_for_a_day(s3, day, conf.ccs, conf.testnames)
         cans_fns.extend(minicans_fns)
         for cn, can_f in enumerate(fetch_cans(s3, conf, cans_fns)):
             try:
                 _update_eta(t0, start_day, day, stop_day, cn, len(cans_fns))
-                #log.info("can %s ready", can_f.name)
+                # log.info("can %s ready", can_f.name)
                 for msmt_tup in load_multiple(can_f.as_posix()):
                     yield msmt_tup
             except Exception as e:

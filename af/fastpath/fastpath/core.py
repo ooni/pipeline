@@ -89,24 +89,18 @@ def setup():
     ap.add_argument("--noapi", action="store_true", help="Do not start API feeder")
     ap.add_argument("--stdout", action="store_true", help="Log to stdout")
     ap.add_argument("--db-uri", help="Database DSN or URI.")
-    ap.add_argument(
-        "--update",
-        action="store_true",
-        help="Update summaries and files instead of logging an error",
-    )
-    ap.add_argument(
-        "--stop-after", type=int, help="Stop after feeding N measurements", default=None
-    )
-    ap.add_argument(
-        "--no-write-to-db",
-        action="store_true",
-        help="Do not insert measurement in database",
-    )
-    ap.add_argument(
-        "--keep-s3-cache",
-        action="store_true",
-        help="Keep files downloaded from S3 in the local cache",
-    )
+    h = "Update summaries and files instead of logging an error"
+    ap.add_argument("--update", action="store_true", help=h)
+    h = "Stop after feeding N measurements"
+    ap.add_argument("--stop-after", type=int, help=h, default=None)
+    h = "Do not insert measurement in database"
+    ap.add_argument("--no-write-to-db", action="store_true", help=h)
+    h = "Keep files downloaded from S3 in the local cache"
+    ap.add_argument("--keep-s3-cache", action="store_true", help=h)
+    ap.add_argument("--ccs", help="Filter comma-separated CCs when feeding from S3")
+    h = "Filter comma-separated test names when feeding from S3 (without underscores)"
+    ap.add_argument("--testnames", help=h)
+
     conf = ap.parse_args()
 
     if conf.devel or conf.stdout or no_journal_handler:
@@ -116,6 +110,12 @@ def setup():
     else:
         log.addHandler(JournalHandler(SYSLOG_IDENTIFIER="fastpath"))
         log.setLevel(logging.DEBUG)
+
+    if conf.ccs:
+        conf.ccs = set(cc.strip() for cc in conf.ccs.split(","))
+
+    if conf.testnames:
+        conf.testnames = set(x.strip() for x in conf.testnames.split(","))
 
     # Run inside current directory in devel mode
     root = Path(os.getcwd()) if conf.devel else Path("/")
