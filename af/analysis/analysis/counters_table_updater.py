@@ -290,12 +290,12 @@ def update_all_counters_tables(conf):
             msm_uid_start = fn.read_text().strip()
         except FileNotFoundError:
             log.warn("%s not found, defaulting to utcnow", fn)
-            msm_uid_start = datetime.utcnow().strftime("%Y%m%d%H%M")
+            msm_uid_start = datetime.utcnow().strftime("%Y%m%d%H%M%S")
 
         # Stop 10 seconds in the past to avoid racing against the fastpath
         # processing time
         end = datetime.utcnow() - timedelta(seconds=10)
-        msm_uid_end = end.strftime("%Y%m%d%H%M")
+        msm_uid_end = end.strftime("%Y%m%d%H%M%S")
         fn.write_text(msm_uid_end)
 
         conn = connect_db(conf.active)
