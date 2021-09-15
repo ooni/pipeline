@@ -1247,6 +1247,8 @@ def score_signal(msm) -> dict:
     else:
         scores["accuracy"] = 0.0
 
+    scores["analysis"] = {"signal_backend_failure": tk["signal_backend_failure"]}
+
     return scores
 
 
