@@ -17,7 +17,6 @@ from base64 import b64decode
 from configparser import ConfigParser
 from datetime import datetime
 from pathlib import Path
-import hashlib
 import logging
 import multiprocessing as mp
 import os
@@ -1327,24 +1326,6 @@ def score_measurement(msm: dict) -> dict:
         raise
 
 
-@metrics.timer("trivial_id")
-def trivial_id(msm: dict) -> str:
-    """Generate a trivial id of the measurement to allow upsert if needed
-    This is used for legacy (before measurement_uid) measurements
-    - 32-bytes hexdigest
-    - Deterministic / stateless with no DB interaction
-    - Malicious/bugged msmts with collisions on report_id/input/test_name lead
-    to different hash values avoiding the collision
-    - Malicious/duplicated msmts that are semantically identical to the "real"
-    one lead to harmless collisions
-    """
-    # Same output with Python's json
-    VER = "00"
-    msm_jstr = ujson.dumps(msm, sort_keys=True, ensure_ascii=False).encode()
-    tid = VER + hashlib.shake_128(msm_jstr).hexdigest(15)
-    return tid
-
-
 def unwrap_msmt(post):
     fmt = post["format"].lower()
     if fmt == "json":
@@ -1379,6 +1360,7 @@ def process_measurement(msm_tup) -> None:
     """
     try:
         msm_jstr, measurement, msmt_uid = msm_tup
+        assert msmt_uid
         if measurement is None:
             measurement = ujson.loads(msm_jstr)
         if sorted(measurement.keys()) == ["content", "format"]:
@@ -1415,9 +1397,6 @@ def process_measurement(msm_tup) -> None:
             measurement["annotations"], dict
         ):
             platform = measurement["annotations"].get("platform", "unset")
-
-        if msmt_uid is None:
-            msmt_uid = trivial_id(measurement)  # legacy measurement
 
         if conf.no_write_to_db:
             return
