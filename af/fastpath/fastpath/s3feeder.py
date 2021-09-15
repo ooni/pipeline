@@ -143,7 +143,9 @@ def list_cans_on_s3_for_a_day(s3, day: date):
 def list_minicans_on_s3_for_a_day(
     s3, day: date, ccs: Set[str], testnames: Set[str]
 ) -> list:
-    """List minicans. Filter them by CCs and testnames"""
+    """List minicans. Filter them by CCs and testnames
+    Testnames are without underscores.
+    """
     # s3cmd ls s3://ooni-data-eu-fra/raw/20210202
     tstamp = day.strftime("%Y%m%d")
     prefix = f"raw/{tstamp}/"
