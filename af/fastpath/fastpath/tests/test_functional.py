@@ -36,8 +36,7 @@ BUCKET_NAME = "ooni-data"
 
 @pytest.fixture
 def cans():
-    """Download interesting cans from S3 to a local directory
-    """
+    """Download interesting cans from S3 to a local directory"""
     # TODO: move to the more flexible s3msmts where possible
     _cans = dict(
         web_conn_it="2018-05-07/20180501T071932Z-IT-AS198471-web_connectivity-20180506T090836Z_AS198471_gKqEpbg0Ny30ldGCQockbZMJSg9HhFiSizjey5e6JxSEHvzm7j-0.2.0-probe.json.lz4",
@@ -365,9 +364,10 @@ def test_whatsapp_probe_bug(cans):
         scores = fp.score_measurement(msm)
         assert scores["blocking_general"] in (0.0, 1.0)
         if "analysis" in scores:
-            assert scores["analysis"]["whatsapp_web_accessible"] in (True, False), ujson.dumps(
-                msm, indent=1, sort_keys=True
-            )
+            assert scores["analysis"]["whatsapp_web_accessible"] in (
+                True,
+                False,
+            ), ujson.dumps(msm, indent=1, sort_keys=True)
             if debug and scores["blocking_general"] > 0:
                 print_msm(msm)
                 print(scores)
@@ -553,6 +553,7 @@ def disabled_test_score_measurement_hhfm_stats(cans):
 
 ## test_name: vanilla_tor
 
+
 def test_score_vanilla_tor_2018(cans):
     can = cans["tor_2018_10_26"]
     timeouts = (
@@ -601,6 +602,7 @@ def test_score_vanilla_tor(cans):
 ## test_name: tor
 # Also see test_score_tor() in test_unit.py
 
+
 def test_score_tor():
     for can_fn, msm in s3msmts("tor", date(2020, 6, 1), date(2020, 6, 12)):
         assert msm["test_name"] == "tor"
@@ -617,7 +619,9 @@ def test_score_tor():
         # TODO: review tests
         break
 
+
 # # test_name: http_requests
+
 
 def test_score_http_requests():
     cnt = 0
@@ -633,9 +637,9 @@ def test_score_http_requests():
         rid = msm["report_id"]
         if rid in skip:
             continue
-        #if rid != erid:
+        # if rid != erid:
         #    continue
-        cnt +=1
+        cnt += 1
         if cnt > 3000:
             break
         print(rid)
@@ -651,7 +655,9 @@ def test_score_http_requests():
                 "blocking_local": 0.0,
             }
 
+
 ## test_name: web_connectivity
+
 
 def test_score_web_connectivity_simple(cans):
     # (rid, inp) -> scores: exact match on scores
@@ -709,7 +715,10 @@ def test_score_web_connectivity_simple(cans):
                 "blocking_local": 0.0,
             }
         },
-        ("20191101T071829Z_AS0_sq5lk0Y4jhCECrgk2pAgMWlgOczBLDkIb2OE9QnHf1OEOmwOBz", "http://www.pravda.ru"): {
+        (
+            "20191101T071829Z_AS0_sq5lk0Y4jhCECrgk2pAgMWlgOczBLDkIb2OE9QnHf1OEOmwOBz",
+            "http://www.pravda.ru",
+        ): {
             # In this msmt title_match is false due to the probe following a redirect.
             # The probe uses:
             # (body_length_match or headers_match or title_match) and (status_code_match != false)
@@ -722,7 +731,6 @@ def test_score_web_connectivity_simple(cans):
             }
         },
     }
-
 
     for can_fn, msm in s3msmts("web_connectivity", start_date=date(2019, 11, 1)):
         rid = msm["report_id"]
@@ -990,7 +998,6 @@ def test_score_psiphon(cans):
             }
 
 
-
 def test_score_http_invalid_request_line_1():
     # https://github.com/ooni/pipeline/issues/294
     # https://explorer.ooni.org/measurement/20190411T192031Z_AS12353_JcA0e4AwUYYzR8aSXkoOiPGSiSmG8naeMOYnOPisECTr5bqelw
@@ -1083,19 +1090,20 @@ def test_score_signal():
         rid = msm["report_id"]
         if rid == "20210427T023145Z_signal_CN_24400_n1_ynto2TVYXtqxhtOo":
             assert scores == {
+                "analysis": {"signal_backend_failure": "generic_timeout_error"},
                 "blocking_general": 1.0,
                 "blocking_global": 0.0,
                 "blocking_country": 0.0,
                 "blocking_isp": 0.0,
                 "blocking_local": 0.0,
             }
-        elif rid == "20210427T013254Z_signal_KZ_48716_n1_kmaSopBo0V1ho8ni":
+        elif rid == "20210427T000430Z_signal_AU_45671_n1_Zq1z77FuiG2IkqqC":
             assert scores == {
-                "blocking_general": 1.0,
+                "blocking_general": 0.0,
                 "blocking_global": 0.0,
                 "blocking_country": 0.0,
                 "blocking_isp": 0.0,
                 "blocking_local": 0.0,
             }
         # No failure was found
-        #elif "accuracy" in scores:
+        # elif "accuracy" in scores:
