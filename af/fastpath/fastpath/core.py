@@ -1244,10 +1244,9 @@ def score_signal(msm) -> dict:
         pass
     elif st == "blocked":
         scores["blocking_general"] = 1.0
+        scores["analysis"] = {"signal_backend_failure": tk["signal_backend_failure"]}
     else:
         scores["accuracy"] = 0.0
-
-    scores["analysis"] = {"signal_backend_failure": tk["signal_backend_failure"]}
 
     return scores
 
