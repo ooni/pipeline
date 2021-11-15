@@ -12,7 +12,6 @@ import os
 import time
 
 import ujson
-import boto3  # debdeps: python3-boto3
 import pytest  # debdeps: python3-pytest
 
 import fastpath.core as fp
@@ -30,7 +29,6 @@ log = logging.getLogger()
 # Explore bucket from CLI:
 # s3cmd ls s3://ooni-data-eu-fra
 
-# TODO: drop the boto3 code and use only s3feeder
 BUCKET_NAME = "ooni-data"
 
 
