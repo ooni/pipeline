@@ -1389,9 +1389,11 @@ def flag_measurements_with_wrong_date(msm: dict, msmt_uid: str, scores: dict) ->
     if delta < -3600:
         log.debug(f"Flagging measurement {msmt_uid} from the future")
         scores["accuracy"] = 0.0
+        scores["msg"] = "Measurement start time from the future"
     elif delta > 31536000:
         log.debug(f"Flagging measurement {msmt_uid} as too old")
         scores["accuracy"] = 0.0
+        scores["msg"] = "Measurement start time too old"
 
 
 @metrics.timer("full_run")

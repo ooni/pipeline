@@ -1115,7 +1115,7 @@ def test_flag_measurements_with_wrong_date_from_future():
     msmt_uid = "20211109115946.469008_IR_webconnectivity_9ba8a0d4f9b116fe"
     scores = {}
     fp.flag_measurements_with_wrong_date(msm, msmt_uid, scores)
-    assert scores
+    assert scores["msg"] == "Measurement start time from the future"
 
 
 def test_flag_measurements_with_wrong_date_too_old():
@@ -1123,4 +1123,4 @@ def test_flag_measurements_with_wrong_date_too_old():
     msmt_uid = "20211109115946.469008_IR_webconnectivity_9ba8a0d4f9b116fe"
     scores = {}
     fp.flag_measurements_with_wrong_date(msm, msmt_uid, scores)
-    assert scores
+    assert scores["msg"] == "Measurement start time too old"
