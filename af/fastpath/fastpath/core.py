@@ -86,7 +86,8 @@ def setup():
     ap.add_argument("--devel", action="store_true", help="Devel mode")
     ap.add_argument("--noapi", action="store_true", help="Do not start API feeder")
     ap.add_argument("--stdout", action="store_true", help="Log to stdout")
-    ap.add_argument("--db-uri", help="Database DSN or URI.")
+    ap.add_argument("--db-uri", help="PG database DSN or URI")
+    ap.add_argument("--clickhouse-host", help="Clickhouse host")
     h = "Update summaries and files instead of logging an error"
     ap.add_argument("--update", action="store_true", help=h)
     h = "Stop after feeding N measurements"
@@ -128,6 +129,8 @@ def setup():
         conf.s3_secret_key = cp["DEFAULT"]["s3_secret_key"].strip()
         if conf.db_uri is None:
             conf.db_uri = cp["DEFAULT"]["db_uri"].strip()
+        if conf.clickhouse_host is None:
+            conf.clickhouse_host = cp["DEFAULT"]["clickhouse_host"].strip()
 
     setup_dirs(conf, root)
 
@@ -262,7 +265,10 @@ def process_measurements_from_s3():
     if conf.no_write_to_db:
         log.info("Skipping DB connection setup")
     else:
-        db.setup(conf)
+        if conf.db_uri:
+            db.setup(conf)
+        if conf.clickhouse_host:
+            db.setup_clickhouse(conf)
 
     for measurement_tup in s3feeder.stream_cans(conf, conf.start_day, conf.end_day):
         assert measurement_tup is not None
@@ -1370,7 +1376,10 @@ def msm_processor(queue):
     if conf.no_write_to_db:
         log.info("Skipping DB connection setup")
     else:
-        db.setup(conf)
+        if conf.db_uri:
+            db.setup(conf)
+        if conf.clickhouse_host:
+            db.setup_clickhouse(conf)
 
     while True:
         msm_tup = queue.get()
@@ -1395,7 +1404,7 @@ def flag_measurements_with_wrong_date(msm: dict, msmt_uid: str, scores: dict) ->
     if delta < -3600:
         log.debug(f"Flagging measurement {msmt_uid} from the future")
         scores["accuracy"] = 0.0
-        scores["msg"] = "Measurement start time from the future"
+        scores["msg"] = "Incorrect measurement start time from the future"
     elif delta > 31536000:
         log.debug(f"Flagging measurement {msmt_uid} as too old")
         scores["accuracy"] = 0.0
@@ -1455,18 +1464,31 @@ def process_measurement(msm_tup) -> None:
         if conf.no_write_to_db:
             return
 
-        db.upsert_summary(
-            measurement,
-            scores,
-            anomaly,
-            confirmed,
-            failure,
-            msmt_uid,
-            sw_name,
-            sw_version,
-            platform,
-            conf.update,
-        )
+        if conf.db_uri:
+            db.upsert_summary(
+                measurement,
+                scores,
+                anomaly,
+                confirmed,
+                failure,
+                msmt_uid,
+                sw_name,
+                sw_version,
+                platform,
+                conf.update,
+            )
+        if conf.clickhouse_host:
+            db.clickhouse_upsert_summary(
+                measurement,
+                scores,
+                anomaly,
+                confirmed,
+                failure,
+                msmt_uid,
+                sw_name,
+                sw_version,
+                platform,
+            )
     except Exception as e:
         log.exception(e)
         metrics.incr("unhandled_exception")
