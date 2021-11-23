@@ -109,6 +109,7 @@ def setup():
     else:
         log.addHandler(JournalHandler(SYSLOG_IDENTIFIER="fastpath"))
         log.setLevel(logging.DEBUG)
+    logging.getLogger("clickhouse_driver.connection").setLevel(logging.WARNING)
 
     if conf.ccs:
         conf.ccs = set(cc.strip() for cc in conf.ccs.split(","))
