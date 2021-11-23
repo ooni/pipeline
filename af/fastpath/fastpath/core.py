@@ -86,6 +86,7 @@ def setup():
     ap.add_argument("--devel", action="store_true", help="Devel mode")
     ap.add_argument("--noapi", action="store_true", help="Do not start API feeder")
     ap.add_argument("--stdout", action="store_true", help="Log to stdout")
+    ap.add_argument("--debug", action="store_true", help="Log at debug level")
     ap.add_argument("--db-uri", help="PG database DSN or URI")
     ap.add_argument("--clickhouse-host", help="Clickhouse host")
     h = "Update summaries and files instead of logging an error"
@@ -104,11 +105,11 @@ def setup():
 
     if conf.devel or conf.stdout or no_journal_handler:
         format = "%(relativeCreated)d %(process)d %(levelname)s %(name)s %(message)s"
-        logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format=format)
+        logging.basicConfig(stream=sys.stdout, format=format)
 
     else:
         log.addHandler(JournalHandler(SYSLOG_IDENTIFIER="fastpath"))
-        log.setLevel(logging.DEBUG)
+    log.setLevel(logging.DEBUG if conf.debug else logging.INFO)
     logging.getLogger("clickhouse_driver.connection").setLevel(logging.WARNING)
 
     if conf.ccs:
