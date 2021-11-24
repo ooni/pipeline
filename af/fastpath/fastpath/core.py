@@ -84,14 +84,15 @@ def setup():
     ap.add_argument("--start-day", type=lambda d: parse_date(d))
     ap.add_argument("--end-day", type=lambda d: parse_date(d))
     ap.add_argument("--devel", action="store_true", help="Devel mode")
-    ap.add_argument("--noapi", action="store_true", help="Do not start API feeder")
+    h = "Process measurements from S3 and do not start API feeder"
+    ap.add_argument("--noapi", action="store_true", help=h)
     ap.add_argument("--stdout", action="store_true", help="Log to stdout")
     ap.add_argument("--debug", action="store_true", help="Log at debug level")
     ap.add_argument("--db-uri", help="PG database DSN or URI")
     ap.add_argument("--clickhouse-host", help="Clickhouse host")
     h = "Update summaries and files instead of logging an error"
     ap.add_argument("--update", action="store_true", help=h)
-    h = "Stop after feeding N measurements"
+    h = "Stop after feeding N measurements from S3"
     ap.add_argument("--stop-after", type=int, help=h, default=None)
     h = "Do not insert measurement in database"
     ap.add_argument("--no-write-to-db", action="store_true", help=h)
@@ -272,6 +273,7 @@ def process_measurements_from_s3():
         if conf.clickhouse_host:
             db.setup_clickhouse(conf)
 
+    msmt_cnt = 0
     for measurement_tup in s3feeder.stream_cans(conf, conf.start_day, conf.end_day):
         assert measurement_tup is not None
         assert len(measurement_tup) == 3
@@ -279,6 +281,10 @@ def process_measurements_from_s3():
         assert msm_jstr is None or isinstance(msm_jstr, (str, bytes)), type(msm_jstr)
         assert msm is None or isinstance(msm, dict)
         process_measurement(measurement_tup)
+        if conf.stop_after:
+            msmt_cnt += 1
+            if msmt_cnt >= conf.stop_after:
+                return
 
 
 @metrics.timer("match_fingerprints")
