@@ -196,7 +196,8 @@ def list_minicans_on_s3_for_a_day(
             if testnames and testname not in testnames:
                 continue
 
-            files.append((fname, f["Size"]))
+            if f["Size"] > 0:
+                files.append((fname, f["Size"]))
 
         if cont_token is None:
             log.info(f"Found {len(files)} minican .tar.gz files")
