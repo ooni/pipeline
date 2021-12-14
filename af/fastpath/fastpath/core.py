@@ -1081,8 +1081,7 @@ def score_psiphon(msm) -> dict:
         scores["accuracy"] = 0.0
 
     truntime = msm.get("test_runtime")
-    btime = tk.get("bootstrap_time")
-    scores["extra"] = dict(test_runtime=truntime, bootstrap_time=btime)
+    scores["extra"] = dict(test_runtime=truntime, bootstrap_time=bootstrap_time)
     return scores
 
 
