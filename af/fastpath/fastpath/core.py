@@ -1080,7 +1080,9 @@ def score_psiphon(msm) -> dict:
         logbug(0, "no resolver_ip", msm)
         scores["accuracy"] = 0.0
 
-    scores["extra"] = dict(test_runtime=msm.get("test_runtime"))
+    truntime = msm.get("test_runtime")
+    btime = tk.get("bootstrap_time")
+    scores["extra"] = dict(test_runtime=truntime, bootstrap_time=btime)
     return scores
 
 

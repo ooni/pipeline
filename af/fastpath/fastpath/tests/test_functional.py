@@ -995,7 +995,7 @@ def test_score_psiphon(cans):
                 "blocking_country": 0.0,
                 "blocking_isp": 0.0,
                 "blocking_local": 0.0,
-                "extra": {"test_runtime": 15.25602748},
+                "extra": {"test_runtime": 15.25602748, "bootstrap_time": 5.532639553},
             }
             break
 
