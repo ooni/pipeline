@@ -89,7 +89,7 @@ def setup():
     ap.add_argument("--stdout", action="store_true", help="Log to stdout")
     ap.add_argument("--debug", action="store_true", help="Log at debug level")
     ap.add_argument("--db-uri", help="PG database DSN or URI")
-    ap.add_argument("--clickhouse-host", help="Clickhouse host")
+    ap.add_argument("--clickhouse-url", help="Clickhouse url")
     h = "Update summaries and files instead of logging an error"
     ap.add_argument("--update", action="store_true", help=h)
     h = "Stop after feeding N measurements from S3"
@@ -132,8 +132,8 @@ def setup():
         conf.s3_secret_key = cp["DEFAULT"]["s3_secret_key"].strip()
         if conf.db_uri is None:
             conf.db_uri = cp["DEFAULT"]["db_uri"].strip()
-        if conf.clickhouse_host is None:
-            conf.clickhouse_host = cp["DEFAULT"]["clickhouse_host"].strip()
+        if conf.clickhouse_url is None:
+            conf.clickhouse_url = cp["DEFAULT"]["clickhouse_url"].strip()
 
     setup_dirs(conf, root)
 
@@ -270,7 +270,7 @@ def process_measurements_from_s3():
     else:
         if conf.db_uri:
             db.setup(conf)
-        if conf.clickhouse_host:
+        if conf.clickhouse_url:
             db.setup_clickhouse(conf)
 
     msmt_cnt = 0
@@ -1386,7 +1386,7 @@ def msm_processor(queue):
     else:
         if conf.db_uri:
             db.setup(conf)
-        if conf.clickhouse_host:
+        if conf.clickhouse_url:
             db.setup_clickhouse(conf)
 
     while True:
@@ -1485,7 +1485,7 @@ def process_measurement(msm_tup) -> None:
                 platform,
                 conf.update,
             )
-        if conf.clickhouse_host:
+        if conf.clickhouse_url:
             db.clickhouse_upsert_summary(
                 measurement,
                 scores,

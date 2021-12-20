@@ -224,7 +224,7 @@ def _click_create_table_fastpath():
 def setup_clickhouse(conf) -> None:
     global click_client
     log.info("Connecting to clickhouse")
-    click_client = Clickhouse(host=conf.clickhouse_host)
+    click_client = Clickhouse.from_url(conf.clickhouse_url)
     rows = click_client.execute("SELECT version()")
     log.debug(f"Clickhouse version: {rows[0][0]}")
     _click_create_table_fastpath()
