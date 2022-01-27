@@ -234,7 +234,7 @@ def test_score_stunreachability_fail():
         "blocking_global": 0.0,
         "blocking_isp": 0.0,
         "blocking_local": 0.0,
-        "extra": {"endpoint": None},
+        "extra": {"endpoint": None, "failure": "boo"},
     }
 
 
