@@ -146,7 +146,7 @@ def test_score_tor():
         "blocking_country": 0.0,
         "blocking_isp": 0.0,
         "blocking_local": 0.0,
-        "extra": {"test_runtime": 0.7671142980000001},
+        "extra": {"test_runtime": 0.767114298},
     }
 
 
