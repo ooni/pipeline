@@ -15,7 +15,7 @@ import ujson
 import pytest  # debdeps: python3-pytest
 
 import fastpath.core as fp
-import fastpath.s3feeder as s3feeder
+import fastpath.oonidata.s3feeder as s3feeder
 
 log = logging.getLogger()
 

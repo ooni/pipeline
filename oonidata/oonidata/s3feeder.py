@@ -26,10 +26,10 @@ import boto3  # debdeps: python3-boto3
 from botocore import UNSIGNED as botoSigUNSIGNED
 from botocore.config import Config as botoConfig
 
-from fastpath.metrics import setup_metrics
-from fastpath.mytypes import MsmtTup  # msmt bytes, msmt dict, uid
-from fastpath.normalize import iter_yaml_msmt_normalized
-from fastpath.utils import trivial_id
+from .metrics import setup_metrics
+from .mytypes import MsmtTup # msmt bytes, msmt dict, uid
+from .normalize import iter_yaml_msmt_normalized
+from .utils import trivial_id
 
 CAN_BUCKET_NAME = "ooni-data"
 MC_BUCKET_NAME = "ooni-data-eu-fra"

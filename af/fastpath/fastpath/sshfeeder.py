@@ -23,9 +23,9 @@ import warnings
 
 warnings.filterwarnings(action="ignore", module=".*paramiko.*")
 
-import fastpath.normalize as normalize  # noqa
-from fastpath.metrics import setup_metrics  # noqa
-from fastpath.mytypes import MsmtTup
+import fastpath.oonidata.normalize as normalize  # noqa
+from fastpath.oonidata.metrics import setup_metrics  # noqa
+from fastpath.oonidata.mytypes import MsmtTup
 
 log = logging.getLogger("fastpath")
 

@@ -3,17 +3,12 @@
 
 from setuptools import setup
 
-NAME = "fastpath"
-DESCRIPTION = ""
-
-REQUIRED = []
-
 setup(
-    name=NAME,
+    name="oonidata",
     python_requires=">=3.7.0",
-    packages=["fastpath", "fastpath.oonidata", "fastpath.tests"],
+    packages=["oonidata"],
     entry_points={"console_scripts": [
-        "fastpath=fastpath.core:main",
+        "oonidata=oonidata:main",
         "reprocessor=fastpath.reprocessor:main",
         "domain_input_updater=fastpath.domain_input:main",
     ]},

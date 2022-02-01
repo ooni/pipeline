@@ -6,9 +6,9 @@ from datetime import date
 
 import ujson
 
-from fastpath.utils import trivial_id
+from fastpath.oonidata.utils import trivial_id
 import fastpath.core as fp
-import fastpath.s3feeder as s3feeder
+import fastpath.oonidata.s3feeder as s3feeder
 
 
 def test_trivial_id():

@@ -16,8 +16,8 @@ import requests
 import tarfile
 import ujson
 
-import fastpath.normalize as norm
-from fastpath.s3feeder import create_s3_client
+import fastpath.oonidata.normalize as norm
+from fastpath.oonidata.s3feeder import create_s3_client
 
 log = logging.getLogger()
 
