@@ -11,9 +11,10 @@ setup(
         "oonidata=oonidata:main",
     ]},
     install_requires=[
-	""
+	"boto3",
+        "pyyaml",
+        "ujson",
+        "lz4"
     ],
-    include_package_data=True,
     zip_safe=False,
-    package_data={'fastpath': ['views/*.tpl', 'static/*']},
 )
