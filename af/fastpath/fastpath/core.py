@@ -42,7 +42,7 @@ from fastpath.localhttpfeeder import start_http_api
 # Push measurements into Postgres
 import fastpath.db as db
 
-from fastpath.metrics import setup_metrics
+from fastpath.oonidata.metrics import setup_metrics
 from fastpath.oonidata.mytypes import MsmtTup
 import fastpath.portable_queue as queue
 
