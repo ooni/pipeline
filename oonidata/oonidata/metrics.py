@@ -34,12 +34,10 @@ class MockStatsClient(object):
     def timer(self, stat, rate):
         return MockTimer()
 
-_STATSD_AVAILABLE = True
 try:
     import statsd  # debdeps: python3-statsd
     statsdclient = statsd.StatsClient
 except ImportError:
-    _STATSD_AVAILABLE = False
     statsdclient = MockStatsClient
 
 def setup_metrics(host="localhost", name=None):
@@ -54,4 +52,4 @@ def setup_metrics(host="localhost", name=None):
         prefix = name
 
     prefix = prefix.strip(".")
-    return statsd.StatsClient(host, 8125, prefix=prefix)
+    return statsdclient(host, 8125, prefix=prefix)
