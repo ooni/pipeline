@@ -4,8 +4,11 @@
 Metric generation
 """
 
+import logging
 from os.path import basename, splitext
 from functools import wraps
+
+log = logging.getLogger("fastpath")
 
 class MockTimer(object):
     def __call__(self, f):
@@ -25,7 +28,7 @@ class MockStatsClient(object):
     def decr(self, stat, count=1, rate=1):
         pass
     def gauge(self, stat, value, rate=1, delta=False):
-        pass
+        log.info(f"{stat}: {value}")
     def set(self, stat, value, rate=1):
         pass
     def timer(self, stat, rate):
