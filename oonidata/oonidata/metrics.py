@@ -31,7 +31,7 @@ class MockStatsClient(object):
         log.info(f"{stat}: {value}")
     def set(self, stat, value, rate=1):
         pass
-    def timer(self, stat, rate):
+    def timer(self, stat, rate=1):
         return MockTimer()
 
 try:
