@@ -1,6 +1,7 @@
 import argparse
 import shutil
 from collections import namedtuple
+from functools import singledispatch
 import tempfile
 import os
 import gzip
@@ -23,6 +24,30 @@ FileEntry = namedtuple("FileEntry", ["country", "test_name", "date", "basename"]
 
 log = logging.getLogger("oonidata")
 logging.basicConfig(level=logging.INFO)
+
+# Taken from:
+# https://github.com/Jigsaw-Code/net-analysis/blob/master/netanalysis/ooni/data/sync_measurements.py#L33
+@singledispatch
+def trim_measurement(json_obj, max_string_size: int):
+    return json_obj
+
+@trim_measurement.register(dict)
+def _(json_dict: dict, max_string_size: int):
+    keys_to_delete: List[str] = []
+    for key, value in json_dict.items():
+        if type(value) == str and len(value) > max_string_size:
+            keys_to_delete.append(key)
+        else:
+            trim_measurement(value, max_string_size)
+    for key in keys_to_delete:
+        del json_dict[key]
+    return json_dict
+
+@trim_measurement.register(list)
+def _(json_list: list, max_string_size: int):
+    for item in json_list:
+        trim_measurement(item, max_string_size)
+    return json_list
 
 def sync(args):
     s3cachedir = tempfile.TemporaryDirectory()
@@ -66,6 +91,8 @@ def sync(args):
                                     continue
                                 if msmt["probe_cc"] != args.country:
                                     continue
+                                if args.max_string_size:
+                                    msmt = trim_measurement(msmt, args.max_string_size)
                                 ujson.dump(msmt, out_file)
                                 out_file.write("\n")
                         except Exception as e:
@@ -98,7 +125,7 @@ def main():
     parser_sync.add_argument("--last_date", type=_parse_date_flag,
                         default=dt.date.today())
     parser_sync.add_argument("--test_name", type=str, default='webconnectivity')
-    parser_sync.add_argument("--max_string_size", type=int, default=1000)
+    parser_sync.add_argument("--max_string_size", type=int)
     parser_sync.add_argument("--output_dir", type=pathlib.Path, required=True)
     parser_sync.add_argument("--debug", action="store_true")
     parser_sync.set_defaults(func=sync)
