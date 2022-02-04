@@ -8,7 +8,7 @@ setup(
     python_requires=">=3.7.0",
     packages=["oonidata"],
     entry_points={"console_scripts": [
-        "oonidata=oonidata:main",
+        "oonidata=oonidata.main:main",
     ]},
     install_requires=[
 	"boto3",
