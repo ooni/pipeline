@@ -19,7 +19,7 @@ from datetime import date, timedelta
 from pathlib import Path
 import logging
 import multiprocessing as mp
-from multiprocessing.pool import ThreadPool
+from multiprocessing.pool import Pool
 import os
 import sys
 import time
@@ -293,7 +293,7 @@ def process_measurements_from_s3():
                 if msmt_cnt >= conf.stop_after:
                     return
 
-    with ThreadPool(processes=5 * os.cpu_count()) as sync_pool:
+    with Pool(processes=5 * os.cpu_count()) as sync_pool:
         for msg in sync_pool.imap_unordered(lambda e: process_can(e[0], e[1]), gen_date_ranges(conf.start_day, conf.end_day)):
             print(msg)
 
