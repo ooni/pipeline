@@ -10,6 +10,7 @@ REQUIRED = [
     "boto3",
     "clickhouse_driver",
     "statsd",
+    "gunicorn",
     "pyyaml",
     "ujson",
     "lz4"
