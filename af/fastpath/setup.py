@@ -9,7 +9,6 @@ DESCRIPTION = ""
 REQUIRED = [
     "boto3",
     "clickhouse_driver",
-    "systemd",
     "statsd",
     "pyyaml",
     "ujson",
