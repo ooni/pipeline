@@ -276,25 +276,27 @@ def gen_date_ranges(start_day, end_day):
         yield (day, day + timedelta(days=1))
         day += timedelta(days=1)
 
+def process_can(interval):
+    start_day, end_day = interval
+    db.setup_clickhouse(conf)
+    msmt_cnt = 0
+    for measurement_tup in s3feeder.stream_cans(conf, start_day, end_day):
+        assert measurement_tup is not None
+        assert len(measurement_tup) == 3
+        msm_jstr, msm, msm_uid = measurement_tup
+        assert msm_jstr is None or isinstance(msm_jstr, (str, bytes)), type(msm_jstr)
+        assert msm is None or isinstance(msm, dict)
+        process_measurement(measurement_tup)
+        if conf.stop_after:
+            msmt_cnt += 1
+            if msmt_cnt >= conf.stop_after:
+                return
+
 def process_measurements_from_s3():
     """Pull measurements from S3 and process them"""
-    def process_can(start_day, end_day):
-        db.setup_clickhouse(conf)
-        msmt_cnt = 0
-        for measurement_tup in s3feeder.stream_cans(conf, start_day, end_day):
-            assert measurement_tup is not None
-            assert len(measurement_tup) == 3
-            msm_jstr, msm, msm_uid = measurement_tup
-            assert msm_jstr is None or isinstance(msm_jstr, (str, bytes)), type(msm_jstr)
-            assert msm is None or isinstance(msm, dict)
-            process_measurement(measurement_tup)
-            if conf.stop_after:
-                msmt_cnt += 1
-                if msmt_cnt >= conf.stop_after:
-                    return
 
-    with Pool(processes=5 * os.cpu_count()) as sync_pool:
-        for msg in sync_pool.imap_unordered(lambda e: process_can(e[0], e[1]), gen_date_ranges(conf.start_day, conf.end_day)):
+    with Pool(processes=5 * os.cpu_count()) as p:
+        for msg in p.imap_unordered(process_can, gen_date_ranges(conf.start_day, conf.end_day)):
             print(msg)
 
 @metrics.timer("match_fingerprints")
