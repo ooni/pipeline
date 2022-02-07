@@ -271,7 +271,7 @@ def gen_date_ranges(start_day, end_day):
     # the last day is not included
     stop_day = end_day if end_day < today else today
     while day < stop_day:
-        yield (day, day + timedelta(days=1)
+        yield (day, day + timedelta(days=1))
         day += timedelta(days=1)
 
 def process_measurements_from_s3():
