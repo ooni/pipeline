@@ -37,7 +37,7 @@ MC_BUCKET_NAME = "ooni-data-eu-fra"
 log = logging.getLogger("fastpath")
 metrics = setup_metrics(name="fastpath.s3feeder")
 
-s3 = create_s3_client()
+s3 = boto3.client("s3", config=botoConfig(signature_version=botoSigUNSIGNED))
 
 # suppress debug logs
 for x in ("urllib3", "botocore", "s3transfer"):
@@ -140,9 +140,6 @@ def load_multiple(fn: str) -> Generator[MsmtTup, None, None]:
     else:
         raise RuntimeError(f"Unexpected [mini]can filename '{fn}'")
 
-
-def create_s3_client():
-    return boto3.client("s3", config=botoConfig(signature_version=botoSigUNSIGNED))
 
 
 def list_cans_on_s3_for_a_day(s3, day: date):
