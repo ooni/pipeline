@@ -37,6 +37,8 @@ MC_BUCKET_NAME = "ooni-data-eu-fra"
 log = logging.getLogger("fastpath")
 metrics = setup_metrics(name="fastpath.s3feeder")
 
+s3 = create_s3_client()
+
 # suppress debug logs
 for x in ("urllib3", "botocore", "s3transfer"):
     logging.getLogger(x).setLevel(logging.INFO)
@@ -318,7 +320,6 @@ def stream_cans(conf, start_day: date, end_day: date) -> Generator[MsmtTup, None
     log.info("Fetching older cans from S3")
     t0 = time.time()
     day = start_day
-    s3 = create_s3_client()
     # the last day is not included
     stop_day = end_day if end_day < today else today
     while day < stop_day:
