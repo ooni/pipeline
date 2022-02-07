@@ -11,6 +11,7 @@ REQUIRED = [
     "clickhouse_driver",
     "statsd",
     "gunicorn",
+    "psycopg2",
     "pyyaml",
     "ujson",
     "lz4"
