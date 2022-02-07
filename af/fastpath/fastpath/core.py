@@ -278,15 +278,8 @@ def gen_date_ranges(start_day, end_day):
 
 def process_measurements_from_s3():
     """Pull measurements from S3 and process them"""
-    if conf.no_write_to_db:
-        log.info("Skipping DB connection setup")
-    else:
-        if conf.db_uri:
-            db.setup(conf)
-        if conf.clickhouse_url:
-            db.setup_clickhouse(conf)
-
     def process_can(start_day, end_day):
+        db.setup_clickhouse(conf)
         msmt_cnt = 0
         for measurement_tup in s3feeder.stream_cans(conf, start_day, end_day):
             assert measurement_tup is not None
