@@ -299,7 +299,7 @@ def process_measurements_from_s3():
                     return
 
     with mp.ThreadPool(processes=5 * os.cpu_count()) as sync_pool:
-        for msg in sync_pool.imap_unordered(process_can, gen_date_ranges(conf.start_day, conf.end_day))
+        for msg in sync_pool.imap_unordered(process_can, gen_date_ranges(conf.start_day, conf.end_day)):
             print(msg)
 
 @metrics.timer("match_fingerprints")
