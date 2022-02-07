@@ -6,7 +6,15 @@ from setuptools import setup
 NAME = "fastpath"
 DESCRIPTION = ""
 
-REQUIRED = []
+REQUIRED = [
+    "boto3",
+    "clickhouse_driver",
+    "systemd",
+    "statsd",
+    "pyyaml",
+    "ujson",
+    "lz4"
+]
 
 setup(
     name=NAME,
