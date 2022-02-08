@@ -11,10 +11,12 @@ AWS_PROFILE=ooni-data aws s3 ls s3://ooni-data/canned/2019-07-16/
 
 from datetime import date, timedelta
 from typing import Generator, Set
+from collections import namedtuple
 from pathlib import Path
 import logging
 import os
 import time
+import gzip
 import tarfile
 
 import lz4.frame as lz4frame  # debdeps: python3-lz4
@@ -85,6 +87,14 @@ def load_multiple(fn: str) -> Generator[MsmtTup, None, None]:
                 msmt_uid = trivial_id(msm)
                 yield (None, msm, msmt_uid)
 
+    elif fn.endswith(".jsonl.gz"):
+        # New JSONL files
+        with gzip.open(fn) as f:
+            for line in f:
+                msm = ujson.loads(line)
+                msmt_uid = trivial_id(msm)
+                yield (None, msm, msmt_uid)
+
     elif fn.endswith(".yaml.lz4"):
         # Legacy lz4 yaml files
         with lz4frame.open(fn) as f:
@@ -145,17 +155,75 @@ def create_s3_client():
 
 def list_cans_on_s3_for_a_day(s3, day: date):
     """List legacy cans."""
-    prefix = f"{day}/"
-    r = s3.list_objects_v2(Bucket=CAN_BUCKET_NAME, Prefix="canned/" + prefix)
-
-    if ("Contents" in r) ^ (day <= date(2020, 10, 21)):
-        # The last day with cans is 2020-10-21
-        log.warn("%d can files found!", len(r.get("Contents", [])))
-
-    fs = r.get("Contents", [])
-    files = [(f["Key"], f["Size"]) for f in fs]
+    prefix = f"canned/{day}/"
+    paginator = s3.get_paginator("list_objects_v2")
+    files = []
+    for r in paginator.paginate(Bucket=MC_BUCKET_NAME, Prefix=prefix):
+        if ("Contents" in r) ^ (day <= date(2020, 10, 21)):
+            # The last day with cans is 2020-10-21
+            log.warn("%d can files found!", len(r.get("Contents", [])))
+        fs = r.get("Contents", [])
+        for f in fs:
+            files.append((f["Key"], f["Size"]))
     return files
 
+
+FileEntry = namedtuple("FileEntry", ["timestamp", "country_code", "test_name", "filename", "size", "ext", "fullpath"])
+
+def iter_file_entries(s3, prefix: str) -> Generator[FileEntry, None, None]:
+    paginator = s3.get_paginator("list_objects_v2")
+    for r in paginator.paginate(Bucket=MC_BUCKET_NAME, Prefix=prefix):
+        for f in r.get("Contents", []):
+            fullpath = f["Key"]
+            filename = fullpath.split("/")[-1]
+            parts = filename.split("_")
+            test_name, _, _, ext = parts[2].split(".", 3)
+            file_entry = FileEntry(
+                timestamp=parts[0],
+                country_code=parts[1],
+                test_name=test_name,
+                filename=filename,
+                fullpath=fullpath,
+                size=f["Size"],
+                ext=ext,
+            )
+            yield file_entry
+
+def _list_legacy_jsonl_on_s3_for_a_day(s3, day: date, country_code: str, test_name: str) -> list:
+    tstamp = day.strftime("%Y%m%d")
+    prefix = f"raw/{tstamp}/"
+    files = []
+    for file_entry in iter_file_entries(s3, prefix):
+        if file_entry.ext != "jsonl.gz":
+            continue
+
+        if country_code and file_entry.country_code != country_code:
+            continue
+
+        if test_name and file_entry.test_name != test_name:
+            continue
+
+        if file_entry.size > 0:
+            files.append((file_entry.fullpath, file_entry.size))
+
+    return sorted(files)
+
+def list_jsonl_on_s3_for_a_day(s3, day: date, country_code: str, test_name: str) -> list:
+    if day >= date(2020, 10, 20):
+        return _list_legacy_jsonl_on_s3_for_a_day(s3, day, country_code, test_name)
+
+    tstamp = day.strftime("%Y%m%d")
+    prefix = f"jsonl/{test_name}/{country_code}/{tstamp}/"
+    files = []
+    for file_entry in iter_file_entries(s3, prefix):
+        if file_entry.ext != "jsonl.gz":
+            log.warn(f"Found non jsonl.gz file in jsonl prefix: {file_entry.fullpath}")
+            continue
+
+        if file_entry.size > 0:
+            files.append((file_entry.fullpath, file_entry.size))
+
+    return sorted(files)
 
 def list_minicans_on_s3_for_a_day(
     s3, day: date, ccs: Set[str], testnames: Set[str]
@@ -166,44 +234,25 @@ def list_minicans_on_s3_for_a_day(
     # s3cmd ls s3://ooni-data-eu-fra/raw/20210202
     tstamp = day.strftime("%Y%m%d")
     prefix = f"raw/{tstamp}/"
-    cont_token = None
     files = []
-    # list_objects_v2 returns 1000 objects max and needs a token (!= None)
-    while True:
-        kw = {} if cont_token is None else dict(ContinuationToken=cont_token)
-        r = s3.list_objects_v2(Bucket=MC_BUCKET_NAME, Prefix=prefix, **kw)
+    for file_entry in iter_file_entries(s3, prefix):
+        if not file_entry.ext != "tar.gz":
+            continue
 
-        cont_token = r.get("NextContinuationToken", None)
-        if ("Contents" in r) ^ (day >= date(2020, 10, 20)):
-            # The first day with minicans is 2020-10-20
-            log.warn("%d minican files found!", len(r.get("Contents", [])))
+        if ccs and file_entry.country_code not in ccs:
+            continue
 
-        for f in r.get("Contents", []):
-            if not f["Key"].endswith(".tar.gz"):
-                continue
+        if testnames and file_entry.test_name not in testnames:
+            continue
 
-            # Example:
-            # raw/20210910/02/CU/signal/2021091002_CU_signal.n0.0.tar.gz
-            fname = f["Key"]
-            try:
-                _raw, _date, _hour, cc, testname, _ = fname.split("/")
-            except Exception:
-                log.warn(f"Ignoring unexpected minican filename {fname}")
+        if file_entry.size > 0:
+            files.append((file_entry.fullpath, file_entry.size))
 
-            if ccs and cc not in ccs:
-                continue
+    if (day >= date(2020, 10, 20)) ^ len(files) > 0:
+        # The first day with minicans is 2020-10-20
+        log.warn("%d minican files found!", len(files))
 
-            if testnames and testname not in testnames:
-                continue
-
-            if f["Size"] > 0:
-                files.append((fname, f["Size"]))
-
-        if cont_token is None:
-            log.info(f"Found {len(files)} minican .tar.gz files")
-            return sorted(files)
-
-    assert False
+    return sorted(files)
 
 
 def log_download(s3fname, size) -> None:

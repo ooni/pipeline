@@ -16,7 +16,7 @@ from typing import List, Generator, Tuple, List
 import ujson
 
 from .s3feeder import stream_cans, load_multiple
-from .s3feeder import list_cans_on_s3_for_a_day, list_minicans_on_s3_for_a_day, fetch_cans
+from .s3feeder import list_jsonl_on_s3_for_a_day, fetch_cans
 from .s3feeder import create_s3_client, _calculate_etr
 
 Config = namedtuple("Config", ["ccs", "testnames", "keep_s3_cache", "s3cachedir"])
@@ -50,10 +50,11 @@ def _(json_list: list, max_string_size: int):
     return json_list
 
 def sync(args):
+    test_name = args.test_name.replace("_", "")
     s3cachedir = tempfile.TemporaryDirectory()
     conf = Config(
         ccs=args.country,
-        testnames=args.test_name,
+        testnames=test_name,
         keep_s3_cache=False,
         s3cachedir=pathlib.Path(s3cachedir.name)
     )
@@ -63,17 +64,13 @@ def sync(args):
     stop_day = args.last_date if args.last_date < today else today
     s3 = create_s3_client()
     while day < stop_day:
-        cans_fns = list_cans_on_s3_for_a_day(s3, day)
-        minicans_fns = list_minicans_on_s3_for_a_day(s3, day, conf.ccs, conf.testnames)
-        cans_fns.extend(minicans_fns)
+        jsonl_fns = list_jsonl_on_s3_for_a_day(s3, day, conf.ccs, conf.testnames)
 
-        log.info(f"Downloading {len(cans_fns)} cans")
-        test_name = args.test_name.replace("_", "")
-        for cn, can_tuple in enumerate(cans_fns):
+        if len(jsonl_fns) > 0:
+            log.info(f"Downloading {day} {len(jsonl_fns)} jsonl.gz")
+        for cn, can_tuple in enumerate(jsonl_fns):
             s3fname, size = can_tuple
             basename = pathlib.Path(s3fname).name
-            if not basename.endswith(".jsonl.gz"):
-                basename = basename.rsplit('.', 2)[0] + '.jsonl.gz'
             dst_path = args.output_dir / args.country / test_name / f"{day:%Y-%m-%d}" / basename
             if dst_path.is_file():
                 continue
@@ -83,14 +80,10 @@ def sync(args):
                 with gzip.open(temp_path, mode="wt", encoding="utf-8", newline="\n") as out_file:
                     for can_f in fetch_cans(s3, conf, [can_tuple]):
                         try:
-                            etr = _calculate_etr(t0, time.time(), args.first_date, day, stop_day, cn, len(cans_fns))
+                            etr = _calculate_etr(t0, time.time(), args.first_date, day, stop_day, cn, len(jsonl_fns))
                             log.info(f"Estimated time remaining: {etr}")
                             for msmt_tup in load_multiple(can_f.as_posix()):
                                 msmt = msmt_tup[1]
-                                if msmt["test_name"].replace("_", "") != test_name:
-                                    continue
-                                if msmt["probe_cc"] != args.country:
-                                    continue
                                 if args.max_string_size:
                                     msmt = trim_measurement(msmt, args.max_string_size)
                                 ujson.dump(msmt, out_file)
