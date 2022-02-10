@@ -15,7 +15,7 @@ from typing import List, Generator, Tuple, List
 
 import ujson
 
-from .s3feeder import stream_cans, load_multiple
+from .s3feeder import stream_cans, load_multiple, date_interval
 from .s3feeder import list_jsonl_on_s3_for_a_day, fetch_cans
 from .s3feeder import create_s3_client, _calculate_etr
 
@@ -59,19 +59,15 @@ def sync(args):
         s3cachedir=pathlib.Path(s3cachedir.name)
     )
     t0 = time.time()
-    day = args.first_date
-    today = dt.date.today()
-    stop_day = args.last_date if args.last_date < today else today
     s3 = create_s3_client()
-    while day < stop_day:
+    for day in date_interval(args.first_date, args.last_date):
         jsonl_fns = list_jsonl_on_s3_for_a_day(s3, day, conf.ccs, conf.testnames)
-
         if len(jsonl_fns) > 0:
             log.info(f"Downloading {day} {len(jsonl_fns)} jsonl.gz")
         for cn, can_tuple in enumerate(jsonl_fns):
             s3fname, size = can_tuple
             basename = pathlib.Path(s3fname).name
-            dst_path = args.output_dir / args.country / test_name / f"{day:%Y-%m-%d}" / basename
+            dst_path = args.output_dir / test_name /  args.country / f"{day:%Y-%m-%d}" / basename
             if dst_path.is_file():
                 continue
             os.makedirs(dst_path.parent, exist_ok=True)

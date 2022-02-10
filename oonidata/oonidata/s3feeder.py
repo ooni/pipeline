@@ -325,7 +325,6 @@ def fetch_cans(s3, conf, files) -> Generator[Path, None, None]:
 
     metrics.gauge("s3_download_speed_avg_Mbps", 0)
 
-
 # TODO: merge with stream_daily_cans, add caching to the latter to be used
 # during functional tests
 # @metrics.timer("fetch_cans_for_a_day_with_cache")
@@ -357,40 +356,63 @@ def _update_eta(t0, start_day, day, stop_day, can_num, can_tot_count):
     except:
         pass
 
-
-def stream_cans(conf, start_day: date, end_day: date) -> Generator[MsmtTup, None, None]:
-    """Stream cans from S3"""
+def date_interval(start_day: date, end_day: date):
     today = date.today()
     if not start_day or start_day >= today:
-        return
-
-    log.info("Fetching older cans from S3")
-    t0 = time.time()
+        raise StopIteration
     day = start_day
-    s3 = create_s3_client()
     # the last day is not included
     stop_day = end_day if end_day < today else today
     while day < stop_day:
+        yield day
+        day += timedelta(days=1)
+
+def stream_measurements_from_files(s3, conf, filenames, cb_file_done=None) -> Generator[MsmtTup, None, None]:
+    for cn, can_f in enumerate(fetch_cans(s3, conf, filenames)):
+        try:
+            if cb_file_done:
+                cb_file_done()
+            # log.info("can %s ready", can_f.name)
+            for msmt_tup in load_multiple(can_f.as_posix()):
+                yield msmt_tup
+        except Exception as e:
+            log.error(str(e), exc_info=True)
+
+        if not conf.keep_s3_cache:
+            try:
+                can_f.unlink()
+            except FileNotFoundError:
+                pass
+
+def stream_cans(conf, start_day: date, end_day: date) -> Generator[MsmtTup, None, None]:
+    """Stream cans from S3"""
+    log.info("Fetching older cans from S3")
+    t0 = time.time()
+    s3 = create_s3_client()
+    lambda cb_file_done: _update_eta(t0, start_day, day, stop_day, cn, len(cans_fns))
+    for day in date_interval(start_day, end_day):
         log.info("Processing day %s", day)
         cans_fns = list_cans_on_s3_for_a_day(s3, day)
         minicans_fns = list_minicans_on_s3_for_a_day(s3, day, conf.ccs, conf.testnames)
         cans_fns.extend(minicans_fns)
-        for cn, can_f in enumerate(fetch_cans(s3, conf, cans_fns)):
-            try:
-                _update_eta(t0, start_day, day, stop_day, cn, len(cans_fns))
-                # log.info("can %s ready", can_f.name)
-                for msmt_tup in load_multiple(can_f.as_posix()):
-                    yield msmt_tup
-            except Exception as e:
-                log.error(str(e), exc_info=True)
+        for msmt_tup in stream_measurements_from_files(s3, conf, cans_fns, cb_file_done=cb_file_done):
+            yield msmt_tup
 
-            if not conf.keep_s3_cache:
-                try:
-                    can_f.unlink()
-                except FileNotFoundError:
-                    pass
+    if end_day:
+        log.info(f"Reached {end_day}, streaming cans from S3 finished")
+        return
 
-        day += timedelta(days=1)
+def stream_jsonl(conf, start_day: date, end_day: date) -> Generator[MsmtTup, None, None]:
+    """Stream jsonl from S3"""
+    log.info("Fetching older cans from S3")
+    t0 = time.time()
+    s3 = create_s3_client()
+    lambda cb_file_done: _update_eta(t0, start_day, day, stop_day, cn, len(cans_fns))
+    for day in date_interval(start_day, end_day):
+        log.info("Processing day %s", day)
+        jsonl_fns = list_jsonl_on_s3_for_a_day(s3, day, conf.ccs, conf.testnames)
+        for msmt_tup in stream_measurements_from_files(s3, conf, jsonl_fns, cb_file_done=cb_file_done):
+            yield msmt_tup
 
     if end_day:
         log.info(f"Reached {end_day}, streaming cans from S3 finished")
