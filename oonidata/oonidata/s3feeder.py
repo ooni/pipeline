@@ -209,7 +209,7 @@ def _legacy_jsonl_on_s3_for_a_day(s3, day: date, country_codes: Set[str], test_n
 
 def jsonl_in_range(s3, conf, start_day: date, end_day: date) -> Generator[FileEntry, None, None]:
     # List all the jsonl file entries in the old bucket format
-    for day in date_interval(date(2020, 10, 20), end_day):
+    for day in date_interval(max(date(2020, 10, 20), start_day), end_day):
         for fe in _legacy_jsonl_on_s3_for_a_day(s3, day, conf.ccs, conf.testnames):
             yield fe
 
