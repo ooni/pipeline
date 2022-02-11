@@ -15,9 +15,8 @@ from typing import List, Generator, Tuple, List
 
 import ujson
 
-from .s3feeder import stream_cans, load_multiple, date_interval
-from .s3feeder import list_jsonl_on_s3_for_a_day, fetch_cans
-from .s3feeder import create_s3_client, _calculate_etr
+from .s3feeder import create_s3_client
+from .s3feeder import jsonl_in_range, stream_measurements_from_files
 
 Config = namedtuple("Config", ["ccs", "testnames", "keep_s3_cache", "s3cachedir"])
 FileEntry = namedtuple("FileEntry", ["country", "test_name", "date", "basename"])
@@ -53,50 +52,34 @@ def sync(args):
     test_name = args.test_name.replace("_", "")
     s3cachedir = tempfile.TemporaryDirectory()
     conf = Config(
-        ccs=args.country,
-        testnames=test_name,
+        ccs=[args.country],
+        testnames=[test_name],
         keep_s3_cache=False,
         s3cachedir=pathlib.Path(s3cachedir.name)
     )
     t0 = time.time()
     s3 = create_s3_client()
-    for day in date_interval(args.first_date, args.last_date):
-        jsonl_fns = list_jsonl_on_s3_for_a_day(s3, day, conf.ccs, conf.testnames)
-        if len(jsonl_fns) > 0:
-            log.info(f"Downloading {day} {len(jsonl_fns)} jsonl.gz")
-        for cn, can_tuple in enumerate(jsonl_fns):
-            s3fname, size = can_tuple
-            basename = pathlib.Path(s3fname).name
-            dst_path = args.output_dir / test_name /  args.country / f"{day:%Y-%m-%d}" / basename
-            if dst_path.is_file():
-                continue
-            os.makedirs(dst_path.parent, exist_ok=True)
-            temp_path = dst_path.with_name(f"{dst_path.name}.tmp")
-            try:
-                with gzip.open(temp_path, mode="wt", encoding="utf-8", newline="\n") as out_file:
-                    for can_f in fetch_cans(s3, conf, [can_tuple]):
-                        try:
-                            etr = _calculate_etr(t0, time.time(), args.first_date, day, stop_day, cn, len(jsonl_fns))
-                            log.info(f"Estimated time remaining: {etr}")
-                            for msmt_tup in load_multiple(can_f.as_posix()):
-                                msmt = msmt_tup[1]
-                                if args.max_string_size:
-                                    msmt = trim_measurement(msmt, args.max_string_size)
-                                ujson.dump(msmt, out_file)
-                                out_file.write("\n")
-                        except Exception as e:
-                            log.error(str(e), exc_info=True)
-                        try:
-                            can_f.unlink()
-                        except FileNotFoundError:
-                            pass
-                    temp_path.replace(dst_path)
-            except:
-                temp_path.unlink()
-                s3cachedir.cleanup()
-                raise
+    for file_entry in jsonl_in_range(s3, conf, args.first_date, args.last_date):
+        dst_path = args.output_dir / file_entry.test_name /  file_entry.country_code / f"{file_entry.timestamp:%Y-%m-%d}" / file_entry.filename
+        if dst_path.is_file():
+            continue
+        os.makedirs(dst_path.parent, exist_ok=True)
+        temp_path = dst_path.with_name(f"{dst_path.name}.tmp")
+        try:
+            with gzip.open(temp_path, mode="wt", encoding="utf-8", newline="\n") as out_file:
+                jsonl_fns = [(file_entry.fullpath, file_entry.size)]
+                for msmt_tup in stream_measurements_from_files(s3, conf, jsonl_fns):
+                    msmt = msmt_tup[1]
+                    if args.max_string_size:
+                        msmt = trim_measurement(msmt, args.max_string_size)
+                    ujson.dump(msmt, out_file)
+                    out_file.write("\n")
+                temp_path.replace(dst_path)
+        except:
+            temp_path.unlink()
+            s3cachedir.cleanup()
+            raise
 
-        day += dt.timedelta(days=1)
     s3cachedir.cleanup()
 
 def _parse_date_flag(date_str: str) -> dt.date:
@@ -104,6 +87,7 @@ def _parse_date_flag(date_str: str) -> dt.date:
 
 def main():
     parser = argparse.ArgumentParser("OONI Data tools")
+    parser.set_defaults(func=lambda r: parser.print_usage())
 
     subparsers = parser.add_subparsers()
 

@@ -9,7 +9,7 @@ AWS_PROFILE=ooni-data aws s3 ls s3://ooni-data/canned/2019-07-16/
 
 """
 
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from typing import Generator, Set
 from collections import namedtuple
 from pathlib import Path
@@ -179,7 +179,7 @@ def iter_file_entries(s3, prefix: str) -> Generator[FileEntry, None, None]:
             parts = filename.split("_")
             test_name, _, _, ext = parts[2].split(".", 3)
             file_entry = FileEntry(
-                timestamp=parts[0],
+                timestamp=datetime.strptime(parts[0], "%Y%m%d%H"),
                 country_code=parts[1],
                 test_name=test_name,
                 filename=filename,
@@ -189,7 +189,7 @@ def iter_file_entries(s3, prefix: str) -> Generator[FileEntry, None, None]:
             )
             yield file_entry
 
-def _list_legacy_jsonl_on_s3_for_a_day(s3, day: date, country_code: str, test_name: str) -> list:
+def _legacy_jsonl_on_s3_for_a_day(s3, day: date, country_codes: Set[str], test_names: Set[str]) -> list:
     tstamp = day.strftime("%Y%m%d")
     prefix = f"raw/{tstamp}/"
     files = []
@@ -197,33 +197,51 @@ def _list_legacy_jsonl_on_s3_for_a_day(s3, day: date, country_code: str, test_na
         if file_entry.ext != "jsonl.gz":
             continue
 
-        if country_code and file_entry.country_code != country_code:
+        if len(country_codes) > 0 and file_entry.country_code not in country_codes:
             continue
 
-        if test_name and file_entry.test_name != test_name:
-            continue
-
-        if file_entry.size > 0:
-            files.append((file_entry.fullpath, file_entry.size))
-
-    return sorted(files)
-
-def list_jsonl_on_s3_for_a_day(s3, day: date, country_code: str, test_name: str) -> list:
-    if day >= date(2020, 10, 20):
-        return _list_legacy_jsonl_on_s3_for_a_day(s3, day, country_code, test_name)
-
-    tstamp = day.strftime("%Y%m%d")
-    prefix = f"jsonl/{test_name}/{country_code}/{tstamp}/"
-    files = []
-    for file_entry in iter_file_entries(s3, prefix):
-        if file_entry.ext != "jsonl.gz":
-            log.warn(f"Found non jsonl.gz file in jsonl prefix: {file_entry.fullpath}")
+        if len(test_names) > 0 and file_entry.test_name not in test_names:
             continue
 
         if file_entry.size > 0:
-            files.append((file_entry.fullpath, file_entry.size))
+            yield file_entry
 
-    return sorted(files)
+
+def jsonl_in_range(s3, conf, start_day: date, end_day: date) -> Generator[FileEntry, None, None]:
+    # List all the jsonl file entries in the old bucket format
+    for day in date_interval(date(2020, 10, 20), end_day):
+        for fe in _legacy_jsonl_on_s3_for_a_day(s3, day, conf.ccs, conf.testnames):
+            yield fe
+
+    prefixes = ["jsonl/"]
+    # We have both a testname list and a country code list, we can efficiently
+    # pre-filter based on prefix
+    if len(conf.testnames) > 0 and len(conf.ccs) > 0:
+        c = itertools.product(conf.testnames, conf.ccs, date_interval(start_day, date(2020, 10, 21)))
+        prefixes = [f"jsonl/{tn}/{cc}/{ts}" for cc, tn, ts in c]
+
+    elif len(conf.testnames):
+        prefixes = [f"jsonl/{tn}/" for tn in conf.testnames]
+
+    # In other cases, we are going to have to list all the bucket and do
+    # filtering based on filepath
+    for p in prefixes:
+        for file_entry in iter_file_entries(s3, p):
+            if file_entry.ext != "jsonl.gz":
+                log.warn(f"Found non jsonl.gz file in jsonl prefix: {file_entry.fullpath}")
+                continue
+
+            if len(conf.ccs) > 0 and file_entry.country_code not in conf.ccs:
+                continue
+
+            if len(conf.testnames) > 0 and file_entry.test_name not in conf.testnames:
+                continue
+
+            if file_entry.timestamp < start_day or file_entry.timestamp >= end_day:
+                continue
+
+            if file_entry.size > 0:
+                yield file_entry
 
 def list_minicans_on_s3_for_a_day(
     s3, day: date, ccs: Set[str], testnames: Set[str]
@@ -405,13 +423,10 @@ def stream_cans(conf, start_day: date, end_day: date) -> Generator[MsmtTup, None
 def stream_jsonl(conf, start_day: date, end_day: date) -> Generator[MsmtTup, None, None]:
     """Stream jsonl from S3"""
     log.info("Fetching older cans from S3")
-    t0 = time.time()
     s3 = create_s3_client()
-    lambda cb_file_done: _update_eta(t0, start_day, day, stop_day, cn, len(cans_fns))
-    for day in date_interval(start_day, end_day):
-        log.info("Processing day %s", day)
-        jsonl_fns = list_jsonl_on_s3_for_a_day(s3, day, conf.ccs, conf.testnames)
-        for msmt_tup in stream_measurements_from_files(s3, conf, jsonl_fns, cb_file_done=cb_file_done):
+    for file_entry in jsonl_in_range(s3, conf, start_day, end_day):
+        jsonl_fns = [(file_entry.fullpath, file_entry.size)]
+        for msmt_tup in stream_measurements_from_files(s3, conf, jsonl_fns):
             yield msmt_tup
 
     if end_day:
