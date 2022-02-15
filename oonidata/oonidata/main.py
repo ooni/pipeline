@@ -49,17 +49,24 @@ def _(json_list: list, max_string_size: int):
     return json_list
 
 def sync(args):
-    test_name = args.test_name.replace("_", "")
+    testnames = []
+    ccs = []
+
+    if args.test_name:
+        testnames = list(map(lambda x: x.replace("_", ""), args.test_name))
+    if args.country:
+        ccs = args.country
+
     s3cachedir = tempfile.TemporaryDirectory()
     conf = Config(
-        ccs=[args.country],
-        testnames=[test_name],
+        ccs=ccs,
+        testnames=testnames,
         keep_s3_cache=False,
         s3cachedir=pathlib.Path(s3cachedir.name)
     )
     t0 = time.time()
     s3 = create_s3_client()
-    for file_entry in jsonl_in_range(s3, conf, args.first_date, args.last_date):
+    for file_entry in jsonl_in_range(s3, conf, args.since, args.until):
         dst_path = args.output_dir / file_entry.test_name /  file_entry.country_code / f"{file_entry.timestamp:%Y-%m-%d}" / file_entry.filename
         if dst_path.is_file():
             continue
@@ -92,14 +99,14 @@ def main():
     subparsers = parser.add_subparsers()
 
     parser_sync = subparsers.add_parser("sync", help="Sync OONI measurements")
-    parser_sync.add_argument("--country", type=str, required=True)
-    parser_sync.add_argument("--first_date", type=_parse_date_flag,
+    parser_sync.add_argument("--country", type=str, nargs="*")
+    parser_sync.add_argument("--since", type=_parse_date_flag,
                         default=dt.date.today() - dt.timedelta(days=14))
-    parser_sync.add_argument("--last_date", type=_parse_date_flag,
+    parser_sync.add_argument("--until", type=_parse_date_flag,
                         default=dt.date.today())
-    parser_sync.add_argument("--test_name", type=str, default='webconnectivity')
-    parser_sync.add_argument("--max_string_size", type=int)
-    parser_sync.add_argument("--output_dir", type=pathlib.Path, required=True)
+    parser_sync.add_argument("--test-name", nargs="*")
+    parser_sync.add_argument("--max-string-size", type=int)
+    parser_sync.add_argument("--output-dir", type=pathlib.Path, required=True)
     parser_sync.add_argument("--debug", action="store_true")
     parser_sync.set_defaults(func=sync)
 
