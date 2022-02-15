@@ -63,13 +63,12 @@ def trim_container(conf, fe: FileEntry, max_string_size: int):
 
 def sync(args):
     testnames = []
-    ccs = []
-    if args.test_name:
-        testnames = list(map(lambda x: x.replace("_", ""), args.test_name))
-    if args.country:
-        ccs = args.country
+    if args.test_names:
+        # Replace _ with a -
+        testnames = list(map(lambda x: x.replace("_", ""), args.test_names))
+
     conf = Config(
-        ccs=ccs,
+        ccs=args.country_codes,
         testnames=testnames,
         keep_s3_cache=True,
         s3cachedir=args.output_dir
@@ -93,12 +92,12 @@ def main():
     subparsers = parser.add_subparsers()
 
     parser_sync = subparsers.add_parser("sync", help="Sync OONI measurements")
-    parser_sync.add_argument("--country", type=str, nargs="*")
+    parser_sync.add_argument("--country-codes", type=str, nargs="*", help="List of probe_cc values to filter by")
     parser_sync.add_argument("--since", type=_parse_date_flag,
                         default=dt.date.today() - dt.timedelta(days=14))
     parser_sync.add_argument("--until", type=_parse_date_flag,
                         default=dt.date.today())
-    parser_sync.add_argument("--test-name", nargs="*")
+    parser_sync.add_argument("--test-names", nargs="*", help="List of test_name values to filter by")
     parser_sync.add_argument("--max-string-size", type=int)
     parser_sync.add_argument("--output-dir", type=pathlib.Path, required=True)
     parser_sync.add_argument("--debug", action="store_true")
