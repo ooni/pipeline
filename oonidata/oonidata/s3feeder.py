@@ -29,7 +29,7 @@ from botocore import UNSIGNED as botoSigUNSIGNED
 from botocore.config import Config as botoConfig
 
 from .metrics import setup_metrics
-from .mytypes import MsmtTup # msmt bytes, msmt dict, uid
+from .mytypes import MsmtTup  # msmt bytes, msmt dict, uid
 from .normalize import iter_yaml_msmt_normalized
 from .utils import trivial_id
 
@@ -154,14 +154,17 @@ def create_s3_client():
 
 
 def list_cans_on_s3_for_a_day(s3, day: date) -> list:
-    return list(map(lambda fe: (fe.s3path, fe.size), iter_cans_on_s3_for_a_day(s3, day)))
+    return list(
+        map(lambda fe: (fe.s3path, fe.size), iter_cans_on_s3_for_a_day(s3, day))
+    )
+
 
 def iter_cans_on_s3_for_a_day(s3, day: date):
     """List legacy cans."""
     prefix = f"canned/{day}/"
     paginator = s3.get_paginator("list_objects_v2")
     files = []
-    for r in paginator.paginate(Bucket=CAN_BUCKET_NAME , Prefix=prefix):
+    for r in paginator.paginate(Bucket=CAN_BUCKET_NAME, Prefix=prefix):
         if ("Contents" in r) ^ (day <= date(2020, 10, 21)):
             # The last day with cans is 2020-10-21
             log.warn("%d can files found!", len(r.get("Contents", [])))
@@ -192,9 +195,10 @@ def iter_cans_on_s3_for_a_day(s3, day: date):
                 size=f["Size"],
                 ext=ext,
                 s3path=s3path,
-                bucket_name=MC_BUCKET_NAME
+                bucket_name=MC_BUCKET_NAME,
             )
             yield file_entry
+
 
 class FileEntry(NamedTuple):
     timestamp: Any
@@ -207,7 +211,13 @@ class FileEntry(NamedTuple):
     bucket_name: str
 
     def output_path(self, dst_dir: Path) -> Path:
-        return dst_dir / self.test_name / self.country_code / f"self.timestamp:%Y-%m-%d" / file_entry.filename
+        return (
+            dst_dir
+            / self.test_name
+            / self.country_code
+            / f"self.timestamp:%Y-%m-%d"
+            / file_entry.filename
+        )
 
     def matches_filter(self, ccs: Set[str], testnames: Set[str]) -> bool:
         if self.country_code and len(ccs) > 0 and self.country_code not in ccs:
@@ -243,11 +253,14 @@ def iter_file_entries(s3, prefix: str) -> Generator[FileEntry, None, None]:
                 s3path=s3path,
                 size=f["Size"],
                 ext=ext,
-                bucket_name=MC_BUCKET_NAME
+                bucket_name=MC_BUCKET_NAME,
             )
             yield file_entry
 
-def _legacy_jsonl_on_s3_for_a_day(s3, day: date, country_codes: Set[str], test_names: Set[str]) -> list:
+
+def _legacy_jsonl_on_s3_for_a_day(
+    s3, day: date, country_codes: Set[str], test_names: Set[str]
+) -> list:
     tstamp = day.strftime("%Y%m%d")
     prefix = f"raw/{tstamp}/"
     files = []
@@ -262,7 +275,9 @@ def _legacy_jsonl_on_s3_for_a_day(s3, day: date, country_codes: Set[str], test_n
             yield file_entry
 
 
-def jsonl_in_range(s3, conf, start_day: date, end_day: date) -> Generator[FileEntry, None, None]:
+def jsonl_in_range(
+    s3, conf, start_day: date, end_day: date
+) -> Generator[FileEntry, None, None]:
     # List all the jsonl file entries in the old bucket format
     for day in date_interval(max(date(2020, 10, 20), start_day), end_day):
         for fe in _legacy_jsonl_on_s3_for_a_day(s3, day, conf.ccs, conf.testnames):
@@ -272,7 +287,9 @@ def jsonl_in_range(s3, conf, start_day: date, end_day: date) -> Generator[FileEn
     # We have both a testname list and a country code list, we can efficiently
     # pre-filter based on prefix
     if len(conf.testnames) > 0 and len(conf.ccs) > 0:
-        c = itertools.product(conf.testnames, conf.ccs, date_interval(start_day, date(2020, 10, 21)))
+        c = itertools.product(
+            conf.testnames, conf.ccs, date_interval(start_day, date(2020, 10, 21))
+        )
         prefixes = [f"jsonl/{tn}/{cc}/{ts}" for cc, tn, ts in c]
 
     elif len(conf.testnames):
@@ -283,7 +300,9 @@ def jsonl_in_range(s3, conf, start_day: date, end_day: date) -> Generator[FileEn
     for p in prefixes:
         for file_entry in iter_file_entries(s3, p):
             if file_entry.ext != "jsonl.gz":
-                log.warn(f"Found non jsonl.gz file in jsonl prefix: {file_entry.s3path}")
+                log.warn(
+                    f"Found non jsonl.gz file in jsonl prefix: {file_entry.s3path}"
+                )
                 continue
 
             if not file_entry.matches_filter(conf.ccs, conf.testnames):
@@ -295,12 +314,20 @@ def jsonl_in_range(s3, conf, start_day: date, end_day: date) -> Generator[FileEn
             if file_entry.size > 0:
                 yield file_entry
 
-def list_minicans_on_s3_for_a_day(s3, day: date, ccs: Set[str], testnames: Set[str]) -> list:
+
+def list_minicans_on_s3_for_a_day(
+    s3, day: date, ccs: Set[str], testnames: Set[str]
+) -> list:
     return list(
-        map(lambda fe: (fe.s3path, fe.size)),
-        filter(lambda fe: fe.matches_filter(ccs, testnames),
-            iter_minicans_on_s3_for_a_day(s3, day))
+        map(
+            lambda fe: (fe.s3path, fe.size),
+            filter(
+                lambda fe: fe.matches_filter(ccs, testnames),
+                iter_minicans_on_s3_for_a_day(s3, day),
+            ),
+        )
     )
+
 
 def iter_minicans_on_s3_for_a_day(s3, day: date) -> Generator[FileEntry, None, None]:
     """List minicans. Filter them by CCs and testnames
@@ -342,6 +369,7 @@ def _update_eta(t0, start_day, day, stop_day, can_num, can_tot_count):
     except:
         pass
 
+
 def date_interval(start_day: date, end_day: date):
     today = date.today()
     if not start_day or start_day >= today:
@@ -353,6 +381,7 @@ def date_interval(start_day: date, end_day: date):
         yield day
         day += timedelta(days=1)
 
+
 @metrics.timer("download_measurement_container")
 def download_measurement_container(s3, conf, file_entry: FileEntry):
     diskf = file_entry.output_path(conf.s3cachedir)
@@ -363,6 +392,7 @@ def download_measurement_container(s3, conf, file_entry: FileEntry):
     metrics.incr("cache_miss")
 
     file_entry.log_download()
+
     def _cb(bytes_count):
         if _cb.start_time is None:
             _cb.start_time = time.time()
@@ -392,7 +422,10 @@ def download_measurement_container(s3, conf, file_entry: FileEntry):
     metrics.gauge("s3_download_speed_avg_Mbps", 0)
     return diskf
 
-def stream_measurements(s3, conf, file_entries: Generator[FileEntry, None, None]) -> Generator[MsmtTup, None, None]:
+
+def stream_measurements(
+    s3, conf, file_entries: Generator[FileEntry, None, None]
+) -> Generator[MsmtTup, None, None]:
     for fe in file_entries:
         if not fe.matches_filter(conf.ccs, conf.testnames):
             continue
@@ -407,6 +440,7 @@ def stream_measurements(s3, conf, file_entries: Generator[FileEntry, None, None]
             except FileNotFoundError:
                 pass
 
+
 def stream_cans(conf, start_day: date, end_day: date) -> Generator[MsmtTup, None, None]:
     """Stream cans from S3"""
     log.info("Fetching older cans from S3")
@@ -416,8 +450,7 @@ def stream_cans(conf, start_day: date, end_day: date) -> Generator[MsmtTup, None
         log.info("Processing day %s", day)
 
         can_file_entries = itertools.chain(
-            iter_cans_on_s3_for_a_day(s3, day),
-            iter_minicans_on_s3_for_a_day(s3, day)
+            iter_cans_on_s3_for_a_day(s3, day), iter_minicans_on_s3_for_a_day(s3, day)
         )
         yield from stream_measurements(s3, conf, can_file_entries)
 
@@ -425,11 +458,16 @@ def stream_cans(conf, start_day: date, end_day: date) -> Generator[MsmtTup, None
         log.info(f"Reached {end_day}, streaming cans from S3 finished")
         return
 
-def stream_jsonl(conf, start_day: date, end_day: date) -> Generator[MsmtTup, None, None]:
+
+def stream_jsonl(
+    conf, start_day: date, end_day: date
+) -> Generator[MsmtTup, None, None]:
     """Stream jsonl from S3"""
     log.info("Fetching older cans from S3")
     s3 = create_s3_client()
-    yield from stream_measurements(s3, conf, jsonl_in_range(s3, conf, start_day, end_day))
+    yield from stream_measurements(
+        s3, conf, jsonl_in_range(s3, conf, start_day, end_day)
+    )
 
     if end_day:
         log.info(f"Reached {end_day}, streaming cans from S3 finished")
