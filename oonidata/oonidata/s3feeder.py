@@ -10,7 +10,7 @@ AWS_PROFILE=ooni-data aws s3 ls s3://ooni-data/canned/2019-07-16/
 """
 
 from datetime import date, timedelta, datetime
-from typing import Generator, Set
+from typing import Generator, Set, NamedTuple, Any
 from collections import namedtuple
 from pathlib import Path
 import logging
@@ -168,14 +168,24 @@ def list_cans_on_s3_for_a_day(s3, day: date):
     return files
 
 
-FileEntry = namedtuple("FileEntry", ["timestamp", "country_code", "test_name", "filename", "size", "ext", "fullpath"])
+class FileEntry(NamedTuple):
+    timestamp: Any
+    country_code: str
+    test_name: str
+    filename: str
+    size: int
+    ext: str
+    s3path: str
+    bucket_name: str
+
+    def output_path(self, dst_dir: Path):
+        return dst_dir / self.test_name / self.country_code / f"self.timestamp:%Y-%m-%d" / file_entry.filename
 
 def iter_file_entries(s3, prefix: str) -> Generator[FileEntry, None, None]:
     paginator = s3.get_paginator("list_objects_v2")
     for r in paginator.paginate(Bucket=MC_BUCKET_NAME, Prefix=prefix):
         for f in r.get("Contents", []):
-            fullpath = f["Key"]
-            filename = fullpath.split("/")[-1]
+            s3path = f["Key"].split("/")[-1]
             parts = filename.split("_")
             test_name, _, _, ext = parts[2].split(".", 3)
             file_entry = FileEntry(
@@ -183,9 +193,10 @@ def iter_file_entries(s3, prefix: str) -> Generator[FileEntry, None, None]:
                 country_code=parts[1],
                 test_name=test_name,
                 filename=filename,
-                fullpath=fullpath,
+                s3path=s3path,
                 size=f["Size"],
                 ext=ext,
+                bucket_name=MC_BUCKET_NAME
             )
             yield file_entry
 
@@ -228,7 +239,7 @@ def jsonl_in_range(s3, conf, start_day: date, end_day: date) -> Generator[FileEn
     for p in prefixes:
         for file_entry in iter_file_entries(s3, p):
             if file_entry.ext != "jsonl.gz":
-                log.warn(f"Found non jsonl.gz file in jsonl prefix: {file_entry.fullpath}")
+                log.warn(f"Found non jsonl.gz file in jsonl prefix: {file_entry.s3path}")
                 continue
 
             if len(conf.ccs) > 0 and file_entry.country_code not in conf.ccs:
@@ -264,7 +275,7 @@ def list_minicans_on_s3_for_a_day(
             continue
 
         if file_entry.size > 0:
-            files.append((file_entry.fullpath, file_entry.size))
+            files.append((file_entry.s3path, file_entry.size))
 
     if (day >= date(2020, 10, 20)) ^ len(files) > 0:
         # The first day with minicans is 2020-10-20
@@ -402,6 +413,24 @@ def stream_measurements_from_files(s3, conf, filenames, cb_file_done=None) -> Ge
             except FileNotFoundError:
                 pass
 
+def download_measurement_container(s3, conf, file_entry: FileEntry):
+    diskf = file_entry.output_path(conf.s3cachedir)
+    if diskf.exists() and file_entry.size == diskf.stat().st_size:
+        diskf.touch(exist_ok=True)
+        return diskf
+
+    diskf.parent.mkdir(parents=True, exist_ok=True)
+    tmpf = diskf.with_suffix(".s3tmp")
+    with tmpf.open("wb") as f:
+        s3.download_fileobj(file_entry.bucket_name, file_entry.s3path, f, Callback=_cb)
+        f.flush()
+        os.fsync(f.fileno())
+    metrics.gauge("fetching", 0)
+    tmpf.rename(diskf)
+    assert file_entry.size == diskf.stat().st_size
+    return diskf
+
+
 def stream_cans(conf, start_day: date, end_day: date) -> Generator[MsmtTup, None, None]:
     """Stream cans from S3"""
     log.info("Fetching older cans from S3")
@@ -425,7 +454,7 @@ def stream_jsonl(conf, start_day: date, end_day: date) -> Generator[MsmtTup, Non
     log.info("Fetching older cans from S3")
     s3 = create_s3_client()
     for file_entry in jsonl_in_range(s3, conf, start_day, end_day):
-        jsonl_fns = [(file_entry.fullpath, file_entry.size)]
+        jsonl_fns = [(file_entry.s3path, file_entry.size)]
         for msmt_tup in stream_measurements_from_files(s3, conf, jsonl_fns):
             yield msmt_tup
 
