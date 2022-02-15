@@ -15,11 +15,10 @@ from typing import List, Generator, Tuple, List
 
 import ujson
 
-from .s3feeder import create_s3_client
-from .s3feeder import jsonl_in_range, stream_measurements_from_files
+from .s3feeder import create_s3_client, FileEntry, download_measurement_container
+from .s3feeder import jsonl_in_range
 
 Config = namedtuple("Config", ["ccs", "testnames", "keep_s3_cache", "s3cachedir"])
-FileEntry = namedtuple("FileEntry", ["country", "test_name", "date", "basename"])
 
 log = logging.getLogger("oonidata")
 logging.basicConfig(level=logging.INFO)
@@ -48,46 +47,41 @@ def _(json_list: list, max_string_size: int):
         trim_measurement(item, max_string_size)
     return json_list
 
+def trim_container(conf, fe: FileEntry, max_string_size: int):
+    mc = fe.output_path(conf.s3cachedir)
+    temp_path = diskf.with_suffix(".tmp")
+    try:
+        with gzip.open(temp_path, mode="wt", encoding="utf-8", newline="\n") as out_file:
+            for msmt in load_multiple(mc.as_posix()):
+                msmt = trim_measurement(msmt, args.max_string_size)
+                ujson.dump(msmt, out_file)
+                out_file.write("\n")
+            temp_path.replace(mc)
+    except:
+        temp_path.unlink()
+        raise
+
 def sync(args):
     testnames = []
     ccs = []
-
     if args.test_name:
         testnames = list(map(lambda x: x.replace("_", ""), args.test_name))
     if args.country:
         ccs = args.country
-
-    s3cachedir = tempfile.TemporaryDirectory()
     conf = Config(
         ccs=ccs,
         testnames=testnames,
-        keep_s3_cache=False,
-        s3cachedir=pathlib.Path(s3cachedir.name)
+        keep_s3_cache=True,
+        s3cachedir=args.output_dir
     )
     t0 = time.time()
     s3 = create_s3_client()
     for file_entry in jsonl_in_range(s3, conf, args.since, args.until):
-        dst_path = args.output_dir / file_entry.test_name /  file_entry.country_code / f"{file_entry.timestamp:%Y-%m-%d}" / file_entry.filename
-        if dst_path.is_file():
+        if not file_entry.matches_filter(ccs, testnames):
             continue
-        os.makedirs(dst_path.parent, exist_ok=True)
-        temp_path = dst_path.with_name(f"{dst_path.name}.tmp")
-        try:
-            with gzip.open(temp_path, mode="wt", encoding="utf-8", newline="\n") as out_file:
-                jsonl_fns = [(file_entry.fullpath, file_entry.size)]
-                for msmt_tup in stream_measurements_from_files(s3, conf, jsonl_fns):
-                    msmt = msmt_tup[1]
-                    if args.max_string_size:
-                        msmt = trim_measurement(msmt, args.max_string_size)
-                    ujson.dump(msmt, out_file)
-                    out_file.write("\n")
-                temp_path.replace(dst_path)
-        except:
-            temp_path.unlink()
-            s3cachedir.cleanup()
-            raise
-
-    s3cachedir.cleanup()
+        mc = download_measurement_container(s3, conf, file_entry)
+        if args.max_string_size:
+            trim_container(conf, fe, args.max_string_size)
 
 def _parse_date_flag(date_str: str) -> dt.date:
     return dt.datetime.strptime(date_str, "%Y-%m-%d").date()

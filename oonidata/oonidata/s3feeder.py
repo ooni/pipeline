@@ -215,15 +215,15 @@ class FileEntry(NamedTuple):
             dst_dir
             / self.test_name
             / self.country_code
-            / f"self.timestamp:%Y-%m-%d"
-            / file_entry.filename
+            / f"{self.timestamp:%Y-%m-%d}"
+            / self.filename
         )
 
     def matches_filter(self, ccs: Set[str], testnames: Set[str]) -> bool:
-        if self.country_code and len(ccs) > 0 and self.country_code not in ccs:
+        if self.country_code and ccs and self.country_code not in ccs:
             return False
 
-        if self.test_name and len(testnames) > 0 and self.test_name not in testnames:
+        if self.test_name and testnames and self.test_name not in testnames:
             return False
 
         return True
@@ -409,6 +409,7 @@ def download_measurement_container(s3, conf, file_entry: FileEntry):
 
     _cb.total_size = file_entry.size
     _cb.total_count = 0
+    _cb.start_time = None
 
     diskf.parent.mkdir(parents=True, exist_ok=True)
     tmpf = diskf.with_suffix(".s3tmp")
