@@ -246,7 +246,7 @@ def iter_file_entries(s3, prefix: str) -> Generator[FileEntry, None, None]:
             parts = filename.split("_")
             test_name, _, _, ext = parts[2].split(".", 3)
             file_entry = FileEntry(
-                day=datetime.strptime(parts[0], "%Y%m%d%H").day(),
+                day=datetime.strptime(parts[0], "%Y%m%d%H").date(),
                 country_code=parts[1],
                 test_name=test_name,
                 filename=filename,
