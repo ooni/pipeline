@@ -188,7 +188,7 @@ def iter_cans_on_s3_for_a_day(s3, day: date):
                 continue
 
             file_entry = FileEntry(
-                timestamp=day,
+                day=day,
                 country_code=country_code,
                 test_name=test_name,
                 filename=filename,
@@ -201,7 +201,7 @@ def iter_cans_on_s3_for_a_day(s3, day: date):
 
 
 class FileEntry(NamedTuple):
-    timestamp: Any
+    day: date
     country_code: Any
     test_name: str
     filename: str
@@ -215,7 +215,7 @@ class FileEntry(NamedTuple):
             dst_dir
             / self.test_name
             / self.country_code
-            / f"{self.timestamp:%Y-%m-%d}"
+            / f"{self.day:%Y-%m-%d}"
             / self.filename
         )
 
@@ -246,7 +246,7 @@ def iter_file_entries(s3, prefix: str) -> Generator[FileEntry, None, None]:
             parts = filename.split("_")
             test_name, _, _, ext = parts[2].split(".", 3)
             file_entry = FileEntry(
-                timestamp=datetime.strptime(parts[0], "%Y%m%d%H"),
+                day=datetime.strptime(parts[0], "%Y%m%d%H").day(),
                 country_code=parts[1],
                 test_name=test_name,
                 filename=filename,
@@ -288,7 +288,7 @@ def jsonl_in_range(
             if not file_entry.matches_filter(conf.ccs, conf.testnames):
                 continue
 
-            if file_entry.timestamp < start_day or file_entry.timestamp >= end_day:
+            if file_entry.day < start_day or file_entry.day >= end_day:
                 continue
 
             if file_entry.size > 0:
