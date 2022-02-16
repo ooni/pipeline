@@ -203,7 +203,7 @@ def iter_cans_on_s3_for_a_day(s3, day: date):
 
 class FileEntry(NamedTuple):
     day: date
-    country_code: Any
+    country_code: str
     test_name: str
     filename: str
     size: int
@@ -283,9 +283,6 @@ def jsonl_in_range(
     for p in prefixes + legacy_prefixes:
         for file_entry in iter_file_entries(s3, p):
             if file_entry.ext != "jsonl.gz":
-                log.warn(
-                    f"Found non jsonl.gz file in jsonl prefix: {file_entry.s3path}"
-                )
                 continue
 
             if not file_entry.matches_filter(conf.ccs, conf.testnames):
