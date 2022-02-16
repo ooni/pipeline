@@ -446,7 +446,7 @@ def stream_jsonl(
     conf, start_day: date, end_day: date
 ) -> Generator[MsmtTup, None, None]:
     """Stream jsonl from S3"""
-    log.info("Fetching older cans from S3")
+    log.info("Fetching jsonl from S3")
     s3 = create_s3_client()
     yield from stream_measurements(
         s3, conf, jsonl_in_range(s3, conf, start_day, end_day)
