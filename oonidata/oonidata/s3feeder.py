@@ -258,46 +258,26 @@ def iter_file_entries(s3, prefix: str) -> Generator[FileEntry, None, None]:
             yield file_entry
 
 
-def _legacy_jsonl_on_s3_for_a_day(
-    s3, day: date, country_codes: Set[str], test_names: Set[str]
-) -> list:
-    tstamp = day.strftime("%Y%m%d")
-    prefix = f"raw/{tstamp}/"
-    files = []
-    for file_entry in iter_file_entries(s3, prefix):
-        if file_entry.ext != "jsonl.gz":
-            continue
-
-        if not file_entry.matches_filter(country_codes, test_names):
-            continue
-
-        if file_entry.size > 0:
-            yield file_entry
-
-
 def jsonl_in_range(
     s3, conf, start_day: date, end_day: date
 ) -> Generator[FileEntry, None, None]:
-    # List all the jsonl file entries in the old bucket format
-    for day in date_interval(max(date(2020, 10, 20), start_day), end_day):
-        for fe in _legacy_jsonl_on_s3_for_a_day(s3, day, conf.ccs, conf.testnames):
-            yield fe
-
+    legacy_prefixes = [
+        f"raw/{d:%Y%m%d}"
+        for d in date_interval(max(date(2020, 10, 20), start_day), end_day)
+    ]
     prefixes = ["jsonl/"]
     # We have both a testname list and a country code list, we can efficiently
     # pre-filter based on prefix
-    if len(conf.testnames) > 0 and len(conf.ccs) > 0:
-        c = itertools.product(
-            conf.testnames, conf.ccs, date_interval(start_day, date(2020, 10, 21))
-        )
-        prefixes = [f"jsonl/{tn}/{cc}/{ts}" for cc, tn, ts in c]
+    if conf.testnames and conf.ccs:
+        c = itertools.product(conf.testnames, conf.ccs)
+        prefixes = [f"jsonl/{tn}/{cc}/" for cc, tn in c]
 
-    elif len(conf.testnames):
+    elif conf.testnames:
         prefixes = [f"jsonl/{tn}/" for tn in conf.testnames]
 
     # In other cases, we are going to have to list all the bucket and do
     # filtering based on filepath
-    for p in prefixes:
+    for p in prefixes + legacy_prefixes:
         for file_entry in iter_file_entries(s3, p):
             if file_entry.ext != "jsonl.gz":
                 log.warn(
