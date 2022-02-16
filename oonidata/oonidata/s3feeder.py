@@ -176,6 +176,7 @@ def iter_cans_on_s3_for_a_day(s3, day: date):
             ext = None
             if filename.endswith(".tar.lz4"):
                 test_name = filename.split(".")[0].replace("_", "")
+                country_code = "XX"
                 ext = "tar.lz4"
             elif filename.endswith(".json.lz4") or filename.endswith(".yaml.lz4"):
                 parts = filename.split("-")
