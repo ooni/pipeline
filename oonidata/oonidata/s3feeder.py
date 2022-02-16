@@ -177,11 +177,11 @@ def iter_cans_on_s3_for_a_day(s3, day: date):
             if filename.endswith(".tar.lz4"):
                 test_name = filename.split(".")[0].replace("_", "")
                 ext = "tar.lz4"
-            elif filename.endswith(".json.lz4"):
+            elif filename.endswith(".json.lz4") or filename.endswith(".yaml.lz4"):
                 parts = filename.split("-")
                 country_code = parts[1]
                 test_name = parts[3].replace("_", "")
-                ext = "json.lz4"
+                ext = ".".join(filename.split(".")[-2:])
             else:
                 if filename != "index.json.gz":
                     log.warn(f"found an unexpected filename {filename}")
@@ -318,15 +318,10 @@ def iter_minicans_on_s3_for_a_day(s3, day: date) -> Generator[FileEntry, None, N
     # s3cmd ls s3://ooni-data-eu-fra/raw/20210202
     tstamp = day.strftime("%Y%m%d")
     prefix = f"raw/{tstamp}/"
-    files = []
     for file_entry in iter_file_entries(s3, prefix):
         if not file_entry.ext != "tar.gz":
             continue
         yield file_entry
-
-    if (day >= date(2020, 10, 20)) ^ len(files) > 0:
-        # The first day with minicans is 2020-10-20
-        log.warn("%d minican files found!", len(files))
 
 
 def _calculate_etr(t0, now, start_day, day, stop_day, can_num, can_tot_count) -> int:
