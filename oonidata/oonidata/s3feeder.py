@@ -195,7 +195,7 @@ def iter_cans_on_s3_for_a_day(s3, day: date):
                 size=f["Size"],
                 ext=ext,
                 s3path=s3path,
-                bucket_name=MC_BUCKET_NAME,
+                bucket_name=CAN_BUCKET_NAME,
             )
             yield file_entry
 
