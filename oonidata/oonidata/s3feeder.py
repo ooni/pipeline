@@ -382,8 +382,6 @@ def date_interval(start_day: date, end_day: date):
 
 @metrics.timer("download_measurement_container")
 def download_measurement_container(s3, conf, file_entry: FileEntry):
-    s3_config = TransferConfig(max_concurrency=10, use_threads=True)
-
     diskf = file_entry.output_path(conf.s3cachedir)
     if diskf.exists() and file_entry.size == diskf.stat().st_size:
         metrics.incr("cache_hit")
@@ -418,7 +416,6 @@ def download_measurement_container(s3, conf, file_entry: FileEntry):
             file_entry.bucket_name,
             file_entry.s3path,
             f,
-            Config=s3_config,
             Callback=_cb
         )
         f.flush()
