@@ -367,7 +367,7 @@ def iter_minicans_on_s3_for_a_day(day: date) -> Generator[FileEntry, None, None]
     tstamp = day.strftime("%Y%m%d")
     prefix = f"raw/{tstamp}/"
     for file_entry in iter_file_entries(prefix):
-        if not file_entry.ext != "tar.gz":
+        if file_entry.ext != "tar.gz":
             continue
         yield file_entry
 

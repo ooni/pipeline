@@ -43,7 +43,7 @@ def test_jsonl_in_range():
     fe_list = list(jsonl_in_range([], [], date(2020, 1, 1), date(2020, 1, 2)))
     assert len(fe_list) == 1125
 
-def test_stream_measurements(tmp_path):
+def test_stream_jsonl_measurements(tmp_path):
     fe_list = list_file_entries("jsonl/telegram/IT/20201009/00/")
     assert len(fe_list) == 1
     for _, msmt, msmt_uid in stream_measurements(fe_list, tmp_path, False):
