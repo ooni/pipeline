@@ -15,10 +15,11 @@ from typing import List, Generator, Tuple, List
 
 import ujson
 
+from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
+
 from .s3feeder import create_s3_client, FileEntry, download_measurement_container
 from .s3feeder import jsonl_in_range
-
-Config = namedtuple("Config", ["ccs", "testnames", "keep_s3_cache", "s3cachedir"])
 
 log = logging.getLogger("oonidata")
 logging.basicConfig(level=logging.INFO)
@@ -50,8 +51,8 @@ def _(json_list: list, max_string_size: int):
     return json_list
 
 
-def trim_container(conf, fe: FileEntry, max_string_size: int):
-    mc = fe.output_path(conf.s3cachedir)
+def trim_container(s3cachedir: pathlib.Path, fe: FileEntry, max_string_size: int):
+    mc = fe.output_path(s3cachedir)
     temp_path = diskf.with_suffix(".tmp")
     try:
         with gzip.open(
@@ -73,20 +74,15 @@ def sync(args):
         # Replace _ with a -
         testnames = list(map(lambda x: x.replace("_", ""), args.test_names))
 
-    conf = Config(
-        ccs=args.country_codes,
-        testnames=testnames,
-        keep_s3_cache=True,
-        s3cachedir=args.output_dir,
-    )
-    t0 = time.time()
-    s3 = create_s3_client()
-    for file_entry in jsonl_in_range(s3, conf.ccs, conf.testnames, args.since, args.until):
-        if not file_entry.matches_filter(conf.ccs, conf.testnames):
-            continue
-        mc = download_measurement_container(s3, conf, file_entry)
-        if args.max_string_size:
-            trim_container(conf, fe, args.max_string_size)
+    log.info(f"Listing measurement in s3 for {args.since} - {args.until} probe_cc: {args.country_codes}")
+    log.info("This may take a while...")
+
+    file_entries = list(jsonl_in_range(args.country_codes, testnames, args.since, args.until))
+    with logging_redirect_tqdm():
+        for file_entry in tqdm(file_entries):
+            mc = download_measurement_container(args.output_dir, file_entry)
+            if args.max_string_size:
+                trim_container(args.output_dir, fe, args.max_string_size)
 
 
 def _parse_date_flag(date_str: str) -> dt.date:

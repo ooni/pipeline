@@ -14,6 +14,7 @@ setup(
 	"boto3",
         "pyyaml",
         "ujson",
+        "tqdm",
         "lz4"
     ],
     zip_safe=False,
