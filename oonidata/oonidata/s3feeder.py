@@ -270,6 +270,7 @@ def list_all_testnames(s3) -> Set[str]:
             testnames.add(f["Prefix"].split("/")[-2])
     return testnames
 
+
 def get_search_prefixes(s3, testnames: Set[str], ccs: Set[str]) -> List[str]:
     """
     get_search_prefixes will return all the prefixes inside of the new jsonl
@@ -280,7 +281,9 @@ def get_search_prefixes(s3, testnames: Set[str], ccs: Set[str]) -> List[str]:
     prefixes = []
     paginator = s3.get_paginator("list_objects_v2")
     for tn in testnames:
-        for r in paginator.paginate(Bucket=MC_BUCKET_NAME, Prefix=f"jsonl/{tn}/", Delimiter="/"):
+        for r in paginator.paginate(
+            Bucket=MC_BUCKET_NAME, Prefix=f"jsonl/{tn}/", Delimiter="/"
+        ):
             for f in r.get("CommonPrefixes", []):
                 prefix = f["Prefix"]
                 cc = prefix.split("/")[-2]
@@ -289,21 +292,32 @@ def get_search_prefixes(s3, testnames: Set[str], ccs: Set[str]) -> List[str]:
                 prefixes.append(prefix)
     return prefixes
 
-def jsonl_in_range(
-        s3, ccs: Set[str], testnames: Set[str], start_day: date, end_day: date
-) -> Generator[FileEntry, None, None]:
+
+def get_jsonl_prefixes(
+    s3, ccs: Set[str], testnames: Set[str], start_day: date, end_day: date
+) -> List[str]:
     legacy_prefixes = [
         f"raw/{d:%Y%m%d}"
         for d in date_interval(max(date(2020, 10, 20), start_day), end_day)
     ]
     if not testnames:
         testnames = list_all_testnames(s3)
-    search_prefixes = get_search_prefixes(s3, testnames, ccs)
+    prefixes = get_search_prefixes(s3, testnames, ccs)
 
-    c = itertools.product(search_prefixes, date_interval(start_day, end_day))
-    prefixes = [f"{p}{d:%Y%m%d}" for p, d in c]
+    # This results in a faster listing in cases where we need only a small time
+    # windows. For larger windows of time, we are better off just listing
+    # everything.
+    if (end_day - start_day).days < 20:
+        c = itertools.product(prefixes, date_interval(start_day, end_day))
+        prefixes = [f"{p}{d:%Y%m%d}" for p, d in c]
+    return prefixes + legacy_prefixes
 
-    for p in prefixes + legacy_prefixes:
+
+def jsonl_in_range(
+    s3, ccs: Set[str], testnames: Set[str], start_day: date, end_day: date
+) -> Generator[FileEntry, None, None]:
+
+    for p in get_jsonl_prefixes(s3, ccs, testnames, start_day, end_day):
         for file_entry in iter_file_entries(s3, p):
             if file_entry.ext != "jsonl.gz":
                 continue
@@ -311,7 +325,7 @@ def jsonl_in_range(
             if not file_entry.matches_filter(ccs, testnames):
                 continue
 
-            if not (file_entry.day < start_day or file_entry.day >= end_day):
+            if file_entry.day < start_day or file_entry.day >= end_day:
                 continue
 
             if file_entry.size > 0:
@@ -412,12 +426,7 @@ def download_measurement_container(s3, conf, file_entry: FileEntry):
     diskf.parent.mkdir(parents=True, exist_ok=True)
     tmpf = diskf.with_suffix(".s3tmp")
     with tmpf.open("wb") as f:
-        s3.download_fileobj(
-            file_entry.bucket_name,
-            file_entry.s3path,
-            f,
-            Callback=_cb
-        )
+        s3.download_fileobj(file_entry.bucket_name, file_entry.s3path, f, Callback=_cb)
         f.flush()
         os.fsync(f.fileno())
     metrics.gauge("fetching", 0)
