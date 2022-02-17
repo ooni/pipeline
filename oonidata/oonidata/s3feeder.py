@@ -10,9 +10,10 @@ AWS_PROFILE=ooni-data aws s3 ls s3://ooni-data/canned/2019-07-16/
 """
 
 from datetime import date, timedelta, datetime
-from typing import Generator, Set, NamedTuple, Any
+from typing import Generator, Set, NamedTuple, Any, List
 from collections import namedtuple
 from pathlib import Path
+import itertools
 import logging
 import os
 import time
@@ -261,34 +262,56 @@ def iter_file_entries(s3, prefix: str) -> Generator[FileEntry, None, None]:
             yield file_entry
 
 
+def list_all_testnames(s3) -> Set[str]:
+    testnames = set()
+    paginator = s3.get_paginator("list_objects_v2")
+    for r in paginator.paginate(Bucket=MC_BUCKET_NAME, Prefix="jsonl/", Delimiter="/"):
+        for f in r.get("CommonPrefixes", []):
+            testnames.add(f["Prefix"].split("/")[-2])
+    return testnames
+
+def get_search_prefixes(s3, testnames: Set[str], ccs: Set[str]) -> List[str]:
+    """
+    get_search_prefixes will return all the prefixes inside of the new jsonl
+    bucket that match the given testnames and ccs.
+    If the ccs list is empty we will return prefixes for all countries for
+    which that particular testname as measurements.
+    """
+    prefixes = []
+    paginator = s3.get_paginator("list_objects_v2")
+    for tn in testnames:
+        for r in paginator.paginate(Bucket=MC_BUCKET_NAME, Prefix=f"jsonl/{tn}/", Delimiter="/"):
+            for f in r.get("CommonPrefixes", []):
+                prefix = f["Prefix"]
+                cc = prefix.split("/")[-2]
+                if ccs and cc not in ccs:
+                    continue
+                prefixes.append(prefix)
+    return prefixes
+
 def jsonl_in_range(
-    s3, conf, start_day: date, end_day: date
+        s3, ccs: Set[str], testnames: Set[str], start_day: date, end_day: date
 ) -> Generator[FileEntry, None, None]:
     legacy_prefixes = [
         f"raw/{d:%Y%m%d}"
         for d in date_interval(max(date(2020, 10, 20), start_day), end_day)
     ]
-    prefixes = ["jsonl/"]
-    # We have both a testname list and a country code list, we can efficiently
-    # pre-filter based on prefix
-    if conf.testnames and conf.ccs:
-        c = itertools.product(conf.testnames, conf.ccs)
-        prefixes = [f"jsonl/{tn}/{cc}/" for cc, tn in c]
+    if not testnames:
+        testnames = list_all_testnames(s3)
+    search_prefixes = get_search_prefixes(s3, testnames, ccs)
 
-    elif conf.testnames:
-        prefixes = [f"jsonl/{tn}/" for tn in conf.testnames]
+    c = itertools.product(search_prefixes, date_interval(start_day, end_day))
+    prefixes = [f"{p}{d:%Y%m%d}" for p, d in c]
 
-    # In other cases, we are going to have to list all the bucket and do
-    # filtering based on filepath
     for p in prefixes + legacy_prefixes:
         for file_entry in iter_file_entries(s3, p):
             if file_entry.ext != "jsonl.gz":
                 continue
 
-            if not file_entry.matches_filter(conf.ccs, conf.testnames):
+            if not file_entry.matches_filter(ccs, testnames):
                 continue
 
-            if file_entry.day < start_day or file_entry.day >= end_day:
+            if not (file_entry.day < start_day or file_entry.day >= end_day):
                 continue
 
             if file_entry.size > 0:
@@ -359,6 +382,8 @@ def date_interval(start_day: date, end_day: date):
 
 @metrics.timer("download_measurement_container")
 def download_measurement_container(s3, conf, file_entry: FileEntry):
+    s3_config = TransferConfig(max_concurrency=10, use_threads=True)
+
     diskf = file_entry.output_path(conf.s3cachedir)
     if diskf.exists() and file_entry.size == diskf.stat().st_size:
         metrics.incr("cache_hit")
@@ -389,7 +414,13 @@ def download_measurement_container(s3, conf, file_entry: FileEntry):
     diskf.parent.mkdir(parents=True, exist_ok=True)
     tmpf = diskf.with_suffix(".s3tmp")
     with tmpf.open("wb") as f:
-        s3.download_fileobj(file_entry.bucket_name, file_entry.s3path, f, Callback=_cb)
+        s3.download_fileobj(
+            file_entry.bucket_name,
+            file_entry.s3path,
+            f,
+            Config=s3_config,
+            Callback=_cb
+        )
         f.flush()
         os.fsync(f.fileno())
     metrics.gauge("fetching", 0)
@@ -442,7 +473,7 @@ def stream_jsonl(
     log.info("Fetching jsonl from S3")
     s3 = create_s3_client()
     yield from stream_measurements(
-        s3, conf, jsonl_in_range(s3, conf, start_day, end_day)
+        s3, conf, jsonl_in_range(s3, conf.ccs, conf.testnames, start_day, end_day)
     )
 
     if end_day:

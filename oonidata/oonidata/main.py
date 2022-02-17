@@ -81,7 +81,7 @@ def sync(args):
     )
     t0 = time.time()
     s3 = create_s3_client()
-    for file_entry in jsonl_in_range(s3, conf, args.since, args.until):
+    for file_entry in jsonl_in_range(s3, conf.ccs, conf.testnames, args.since, args.until):
         if not file_entry.matches_filter(conf.ccs, conf.testnames):
             continue
         mc = download_measurement_container(s3, conf, file_entry)
