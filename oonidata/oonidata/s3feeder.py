@@ -309,12 +309,12 @@ def get_jsonl_prefixes(
         testnames = list_all_testnames()
     prefixes = get_search_prefixes(testnames, ccs)
 
+    combos = list(itertools.product(prefixes, date_interval(start_day, end_day)))
     # This results in a faster listing in cases where we need only a small time
-    # windows. For larger windows of time, we are better off just listing
-    # everything.
-    if (end_day - start_day).days < 20:
-        c = itertools.product(prefixes, date_interval(start_day, end_day))
-        prefixes = [f"{p}{d:%Y%m%d}" for p, d in c]
+    # window or few testnames. For larger windows of time, we are better off
+    # just listing everything.
+    if len(combos) > 1_000_000: # XXX we might want to tweak this parameter a bit
+        prefixes = [f"{p}{d:%Y%m%d}" for p, d in combos]
     return prefixes + legacy_prefixes
 
 def list_file_entries(prefix):
