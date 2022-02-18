@@ -727,7 +727,7 @@ def get_http_header(resp, header_name, case_sensitive=False):
 
     # backward compatibility with older measurements that don't have
     # header_list
-    if "header_list" not in resp:
+    if "headers_list" not in resp:
         headers = resp.get("headers", {})
         header_list = [[h,v] for h,v in headers.items()]
     else:
