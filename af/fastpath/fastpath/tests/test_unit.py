@@ -369,7 +369,7 @@ def test_get_http_header():
             "location": "http://example2.com"
         },
         "headers_list": [
-            ["location", "http://example.com"]
+            ["location", "http://example.com"],
             ["location", "http://example2.com"]
         ],
     }
