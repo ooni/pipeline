@@ -143,7 +143,7 @@ def minicans(test_name, start_date: date, end_date: date, end=None):
     while day <= end_date:
         tn_filter = set([test_name.replace("_", "")])
         log.info(day)
-        li = s3feeder.list_minicans_on_s3_for_a_day(s3, day, None, tn_filter)
+        li = s3feeder.list_minicans_on_s3_for_a_day(day, None, tn_filter)
         for s3fname, s3size in li:
             # s3fname: raw/20210426/23/YE/ndt/2021042623_YE_ndt.n0.0.tar.gz
             local_file = Path("testdata") / "mini" / s3fname
@@ -167,8 +167,7 @@ def minicans(test_name, start_date: date, end_date: date, end=None):
 
 
 def list_cans_on_s3_for_a_day(day, filter=None, bysize=False):
-    s3 = s3feeder.create_s3_client()
-    fns = s3feeder.list_cans_on_s3_for_a_day(s3, day)
+    fns = s3feeder.list_cans_on_s3_for_a_day(day)
     if bysize:
         fns = sorted(fns, key=lambda i: i[1])
     else:
