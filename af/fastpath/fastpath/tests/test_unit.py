@@ -32,11 +32,7 @@ def test_match_fingerprints_match_country():
     fp.setup_fingerprints()
     msm = {
         "probe_cc": "MY",
-        "test_keys": {
-            "requests": [
-                {"response": {"body": "foo ... Makluman/Notification ... foo"}}
-            ]
-        },
+        "test_keys": {"requests": [{"response": {"body": "foo ... Makluman/Notification ... foo"}}]},
     }
     matches = fp.match_fingerprints(msm)
     assert matches == [{"body_match": "Makluman/Notification", "locality": "country"}]
@@ -392,13 +388,9 @@ def test_s3feeder_eta():
     assert etr / 3600 == 4
     etr = s3feeder._calculate_etr(t0, now, start_day, day, stop_day, 3, 4)
     assert etr / 3600 == 1
-    etr = s3feeder._calculate_etr(
-        t0, now, start_day, date(2020, 1, 2), date(2020, 1, 5), -1, 9
-    )
+    etr = s3feeder._calculate_etr(t0, now, start_day, date(2020, 1, 2), date(2020, 1, 5), -1, 9)
     assert etr / 3600 == 4.0
-    etr = s3feeder._calculate_etr(
-        t0, now, start_day, date(2020, 1, 4), date(2020, 1, 5), 9, 10
-    )
+    etr = s3feeder._calculate_etr(t0, now, start_day, date(2020, 1, 4), date(2020, 1, 5), 9, 10)
     assert etr / 3600 == 1.0
 
 
@@ -419,9 +411,7 @@ def test_get_http_header():
 
     resp = {
         "headers": {"location": "http://example2.com"},
-        "headers_list": [
-            ["location", "http://example.com"]["location", "http://example2.com"]
-        ],
+        "headers_list": [["location", "http://example.com"]["location", "http://example2.com"]],
     }
     assert fp.get_http_header(resp, "Location") == [
         "http://example.com",
