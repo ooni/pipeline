@@ -454,21 +454,26 @@ def stream_measurements(
         s3cachedir: Path, keep_s3_cache: bool,
 ) -> Generator[MsmtTup, None, None]:
 
-    with Pool(processes=MAX_PROCESS_COUNT) as pool:
-        mc_list = pool.starmap(
-                download_measurement_container,
-                zip(itertools.repeat(s3cachedir, len(file_entries)), file_entries)
-        )
-        for mc in mc_list:
+    t0 = time.time()
+    total_size = sum(lambda fe: fe.size, file_entries)
+    processed_size = 0
+
+    for fe in file_entries:
+        mc = download_measurement_container(s3cachedir, fe)
+        try:
+            yield from load_multiple(mc.as_posix())
+        except Exception as e:
+            log.error(str(e), exc_info=True)
+        processed_size += fe.size
+        mbps = processed_size / (time.time() - t0) / 1_000_000
+        eta = timedelta(seconds=(total_size - processed_size)/(mbps * 1_000_000))
+        log.info(f"Speed: {mbps} MB/s")
+        log.info(f"ETA: {eta}")
+        if not keep_s3_cache:
             try:
-                yield from load_multiple(mc.as_posix())
-            except Exception as e:
-                log.error(str(e), exc_info=True)
-            if not keep_s3_cache:
-                try:
-                    mc.unlink()
-                except FileNotFoundError:
-                    pass
+                mc.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def stream_cans(conf, start_day: date, end_day: date) -> Generator[MsmtTup, None, None]:
