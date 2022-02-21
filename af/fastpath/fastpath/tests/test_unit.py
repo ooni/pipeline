@@ -2,6 +2,7 @@
 # Fastpath - unit tests
 #
 
+from pathlib import Path
 from datetime import date
 
 import ujson
@@ -9,6 +10,11 @@ import ujson
 from fastpath.utils import trivial_id
 import fastpath.core as fp
 import fastpath.s3feeder as s3feeder
+
+
+def loadj(fn):
+    f = Path("fastpath/tests/data") / fn
+    return ujson.loads(f.read_text())
 
 
 def test_trivial_id():
@@ -147,6 +153,22 @@ def test_score_tor():
         "blocking_isp": 0.0,
         "blocking_local": 0.0,
         "extra": {"test_runtime": 0.767114298},
+    }
+
+
+# # test_name: riseupvpn
+
+
+def test_score_riseupvpn():
+    msm = loadj("riseupvpn.json")
+    scores = fp.score_measurement(msm)
+    assert scores == {
+        "blocking_general": 1.0,
+        "blocking_global": 0.0,
+        "blocking_country": 0.0,
+        "blocking_isp": 0.0,
+        "blocking_local": 0.0,
+        "extra": {"test_runtime": 1.076507343},
     }
 
 
@@ -379,21 +401,16 @@ def test_s3feeder_eta():
     )
     assert etr / 3600 == 1.0
 
+
 def test_get_http_header():
     resp = {
-        "headers": {
-            "Location": "http://example.com"
-        },
-        "headers_list": [
-            ["Location", "http://example.com"]
-        ],
+        "headers": {"Location": "http://example.com"},
+        "headers_list": [["Location", "http://example.com"]],
     }
     assert fp.get_http_header(resp, "Location") == ["http://example.com"]
 
     resp = {
-        "headers": {
-            "Location": "http://example.com"
-        },
+        "headers": {"Location": "http://example.com"},
     }
     assert fp.get_http_header(resp, "Location") == ["http://example.com"]
 
@@ -401,13 +418,12 @@ def test_get_http_header():
     assert fp.get_http_header(resp, "Location") == []
 
     resp = {
-        "headers": {
-            "location": "http://example2.com"
-        },
+        "headers": {"location": "http://example2.com"},
         "headers_list": [
-            ["location", "http://example.com"]
-            ["location", "http://example2.com"]
+            ["location", "http://example.com"]["location", "http://example2.com"]
         ],
     }
-    assert fp.get_http_header(resp, "Location") == ["http://example.com", "http://example2.com"]
-
+    assert fp.get_http_header(resp, "Location") == [
+        "http://example.com",
+        "http://example2.com",
+    ]
