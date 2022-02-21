@@ -455,7 +455,7 @@ def stream_measurements(
 ) -> Generator[MsmtTup, None, None]:
 
     t0 = time.time()
-    total_size = sum(lambda fe: fe.size, file_entries)
+    total_size = sum(map(lambda fe: fe.size, file_entries))
     processed_size = 0
 
     for fe in file_entries:
