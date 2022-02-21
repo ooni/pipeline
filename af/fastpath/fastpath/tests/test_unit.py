@@ -14,7 +14,8 @@ import fastpath.s3feeder as s3feeder
 
 def loadj(fn):
     f = Path("fastpath/tests/data") / fn
-    return ujson.loads(f.read_text())
+    t = f.with_suffix(".json").read_text()
+    return ujson.loads(t)
 
 
 def test_trivial_id():
@@ -138,9 +139,7 @@ def test_score_measurement_confirmed():
 
 
 def test_score_tor():
-    fn = "fastpath/tests/data/tor.json"
-    with open(fn) as f:
-        msm = ujson.load(f)
+    msm = loadj("tor")
     scores = fp.score_measurement(msm)
     assert scores == {
         "blocking_general": 0.0,
@@ -156,7 +155,7 @@ def test_score_tor():
 
 
 def test_score_riseupvpn():
-    msm = loadj("riseupvpn.json")
+    msm = loadj("riseupvpn")
     scores = fp.score_measurement(msm)
     assert scores == {
         "blocking_general": 1.0,
@@ -173,9 +172,7 @@ def test_score_riseupvpn():
 
 def test_score_meek():
     # msmt from legacy probes having a list as "input"
-    fn = "fastpath/tests/data/meek.json"
-    with open(fn) as f:
-        msm = ujson.load(f)
+    msm = loadj("meek")
     scores = fp.score_measurement(msm)
     assert scores == {
         "blocking_country": 0.0,
@@ -188,9 +185,7 @@ def test_score_meek():
 
 def test_score_meek2():
     # msmt from legacy probes having a list as "input"
-    fn = "fastpath/tests/data/meek2.json"
-    with open(fn) as f:
-        msm = ujson.load(f)
+    msm = loadj("meek2")
     scores = fp.score_measurement(msm)
     assert scores == {
         "blocking_country": 0.0,
@@ -206,9 +201,7 @@ def test_score_meek2():
 
 def test_score_http_requests():
     # failed
-    fn = "fastpath/tests/data/http_requests_1.json"
-    with open(fn) as f:
-        msm = ujson.load(f)
+    msm = loadj("http_requests_1")
     scores = fp.score_measurement(msm)
     assert scores == {
         "accuracy": 0.0,
@@ -260,9 +253,7 @@ def test_score_stunreachability_fail():
 
 
 def test_score_torsf():
-    fn = "fastpath/tests/data/torsf_1.json"
-    with open(fn) as f:
-        msm = ujson.load(f)
+    msm = loadj("torsf_1")
     scores = fp.score_measurement(msm)
     assert scores == {
         "blocking_country": 0.0,
@@ -274,9 +265,7 @@ def test_score_torsf():
 
 
 def test_score_torsf2():
-    fn = "fastpath/tests/data/torsf_2.json"
-    with open(fn) as f:
-        msm = ujson.load(f)
+    msm = loadj("torsf_2")
     scores = fp.score_measurement(msm)
     assert scores == {
         "blocking_country": 0.0,
@@ -293,8 +282,7 @@ def test_score_torsf2():
 
 def test_bug_backend351():
     # https://api.ooni.io/api/v1/measurement/temp-id-386770148
-    with open("fastpath/tests/data/bug_351.json") as f:
-        msm = ujson.load(f)
+    msm = loadj("bug_351")
     scores = fp.score_measurement(msm)
     assert scores == {
         "blocking_general": 1.0,
@@ -310,8 +298,7 @@ def test_bug_backend351():
 def test_bug_backend352():
     # https://github.com/ooni/backend/issues/352
     # https://explorer.ooni.org/measurement/20200302T130853Z_AS197207_WIN8WWfSysccyZSG06Z5AaMJjSzrvxaq7UOiTnasi52k9D77T3?input=https%3A%2F%2Ffa.wikipedia.org
-    with open("fastpath/tests/data/bug_352.json") as f:
-        msm = ujson.load(f)
+    msm = loadj("bug_352")
     scores = fp.score_measurement(msm)
     assert scores == {
         "analysis": {"blocking_type": "dns"},
@@ -328,8 +315,7 @@ def test_bug_requests_None():
     # File "/usr/lib/python3.7/dist-packages/fastpath/core.py", line 295, in match_fingerprints
     # for req in test_keys.get("requests", ()):
     # TypeError: 'NoneType' object is not iterable
-    with open("fastpath/tests/data/requests_none.json") as f:
-        msm = ujson.load(f)
+    msm = loadj("requests_none")
     scores = fp.score_measurement(msm)
     assert scores == {
         "analysis": {"blocking_type": "dns"},
@@ -342,8 +328,7 @@ def test_bug_requests_None():
 
 
 def test_bug_test_keys_None():
-    with open("fastpath/tests/data/test_keys_none.json") as f:
-        msm = ujson.load(f)
+    msm = loadj("test_keys_none")
     scores = fp.score_measurement(msm)
     assert scores == {
         "accuracy": 0.0,
