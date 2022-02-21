@@ -731,7 +731,7 @@ def get_http_header(resp, header_name, case_sensitive=False):
         headers = resp.get("headers", {})
         header_list = [[h,v] for h,v in headers.items()]
     else:
-        headers_list = resp.get("headers_list")
+        headers_list = resp.get("headers_list")  # TODO: unused
 
     values = []
     for h, v in header_list:
