@@ -1353,8 +1353,9 @@ def score_riseupvpn(msm) -> dict:
     # https://github.com/ooni/backend/issues/541
     scores = init_scores()
     tk = msm.get("test_keys", {})
-    obfs4 = tk.get("transport_status", {}).get("obfs4")
-    openvpn = tk.get("transport_status", {}).get("openvpn")
+    tstatus = tk.get("transport_status") or {}
+    obfs4 = tstatus.get("obfs4")
+    openvpn = tstatus.get("openvpn")
     anomaly = (
         tk.get("api_status") == "blocked"
         or tk.get("ca_cert_status") is False
