@@ -5,6 +5,7 @@
 from pathlib import Path
 from datetime import date
 
+import pytest
 import ujson
 
 from fastpath.utils import trivial_id
