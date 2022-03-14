@@ -716,10 +716,8 @@ def get_http_header(resp, header_name, case_sensitive=False):
        given that we may have multiple keys per header. If the new
        headers_list field is present in the response, we'll use
        that, otherwise we'll fallback to the headers map. We perform
-       case sensitive header names search by default. You can yet
-       optionally select case insensitive comparison, which is useful,
-       e.g., when processing results where a change in the case
-       implies the presence of a transparent HTTP proxy."""
+       case insensitive header names search by default. You can yet
+       optionally select case sensitive comparison."""
     if case_sensitive == False:
         header_name = header_name.lower()
 
@@ -731,7 +729,7 @@ def get_http_header(resp, header_name, case_sensitive=False):
         headers = resp.get("headers", {})
         header_list = [[h,v] for h,v in headers.items()]
     else:
-        headers_list = resp.get("headers_list")
+        headers_list = resp.get("headers_list")  # TODO: unused
 
     values = []
     for h, v in header_list:
@@ -1312,6 +1310,22 @@ def score_signal(msm) -> dict:
     return scores
 
 
+def score_stunreachability(msm) -> dict:
+    """Calculate measurement scoring for STUN reachability
+    Returns a scores dict
+    """
+    # https://github.com/ooni/backend/issues/551
+    scores = init_scores()
+    tk = msm.get("test_keys", {})
+    scores["extra"] = dict(endpoint=tk.get("endpoint"))
+    failure = tk.get("failure")
+    if failure:
+        scores["blocking_general"] = 1.0
+        scores["extra"]["failure"] = failure
+
+    return scores
+
+
 def score_torsf(msm) -> dict:
     """Calculate measurement scoring for Tor Snowflake
     Returns a scores dict
@@ -1337,8 +1351,9 @@ def score_riseupvpn(msm) -> dict:
     # https://github.com/ooni/backend/issues/541
     scores = init_scores()
     tk = msm.get("test_keys", {})
-    obfs4 = tk.get("transport_status", {}).get("obfs4")
-    openvpn = tk.get("transport_status", {}).get("openvpn")
+    tstatus = tk.get("transport_status") or {}
+    obfs4 = tstatus.get("obfs4")
+    openvpn = tstatus.get("openvpn")
     anomaly = (
         tk.get("api_status") == "blocked"
         or tk.get("ca_cert_status") is False
@@ -1393,6 +1408,8 @@ def score_measurement(msm: dict) -> dict:
             return score_dns_consistency(msm)
         if tn == "signal":
             return score_signal(msm)
+        if tn == "stunreachability":
+            return score_stunreachability(msm)
         if tn == "torsf":
             return score_torsf(msm)
         if tn == "riseupvpn":

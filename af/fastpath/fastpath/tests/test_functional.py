@@ -1130,6 +1130,23 @@ def test_score_signal():
         # elif "accuracy" in scores:
 
 
+def test_score_stunreachability():
+    for can_fn, msm in minicans("stunreachability", date(2022, 1, 25), date(2022, 1, 26), 1):
+        scores = fp.score_measurement(msm)
+        assert msm["report_id"] == "20220125T000735Z_stunreachability_AT_12605_n1_DaOzvtj2vaXE8GH2"
+        assert scores == {
+            "blocking_general": 0.0,
+            "blocking_global": 0.0,
+            "blocking_country": 0.0,
+            "blocking_isp": 0.0,
+            "blocking_local": 0.0,
+            "extra": {"endpoint": "stun.l.google.com:19302"},
+        }
+        return
+
+    assert 0, "Measurement not found"
+
+
 def test_score_torsf():
     for can_fn, msm in minicans("torsf", date(2021, 11, 23), date(2021, 11, 23), 1):
         scores = fp.score_measurement(msm)
@@ -1156,8 +1173,7 @@ def test_score_riseupvpn():
             "blocking_country": 0.0,
             "blocking_isp": 0.0,
             "blocking_local": 0.0,
-            'extra': {'test_runtime': 3.8260852},
-
+            "extra": {"test_runtime": 3.8260852},
         }
         assert msm["report_id"] == "20211015T005140Z_riseupvpn_AR_7303_n1_gc8so3BXiS9thxBJ"
         return
