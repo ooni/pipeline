@@ -19,7 +19,7 @@ import os
 import time
 import gzip
 import tarfile
-from multiprocessing import Pool
+from multiprocessing import Pool, ThreadPool
 
 import lz4.frame as lz4frame  # debdeps: python3-lz4
 import ujson
@@ -307,14 +307,16 @@ def get_jsonl_prefixes(
     ]
     if not testnames:
         testnames = list_all_testnames()
-    prefixes = get_search_prefixes(testnames, ccs)
+    prefixes = []
+    if start_day < date(2020, 10, 21):
+        prefixes = get_search_prefixes(testnames, ccs)
+        combos = list(itertools.product(prefixes, date_interval(start_day, end_day)))
+        # This results in a faster listing in cases where we need only a small time
+        # window or few testnames. For larger windows of time, we are better off
+        # just listing everything.
+        if len(combos) > 1_000_000: # XXX we might want to tweak this parameter a bit
+            prefixes = [f"{p}{d:%Y%m%d}" for p, d in combos]
 
-    combos = list(itertools.product(prefixes, date_interval(start_day, end_day)))
-    # This results in a faster listing in cases where we need only a small time
-    # window or few testnames. For larger windows of time, we are better off
-    # just listing everything.
-    if len(combos) > 1_000_000: # XXX we might want to tweak this parameter a bit
-        prefixes = [f"{p}{d:%Y%m%d}" for p, d in combos]
     return prefixes + legacy_prefixes
 
 def list_file_entries(prefix):
