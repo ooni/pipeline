@@ -15,6 +15,9 @@ from typing import List, Generator, Tuple, List
 
 import ujson
 
+from multiprocessing import Pool
+from multiprocessing.pool import ThreadPool
+
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
@@ -68,7 +71,19 @@ def trim_container(s3cachedir: pathlib.Path, fe: FileEntry, max_string_size: int
         raise
 
 
+def download_and_trim(args):
+    def closure(fe):
+        mc = download_measurement_container(args.output_dir, fe)
+        if args.max_string_size:
+            trim_container(args.output_dir, fe, args.max_string_size)
+    return closure
+
 def sync(args):
+    ChosenPool = ThreadPool
+    if args.use_process:
+        print("Using process pool")
+        ChosenPool = Pool
+
     testnames = []
     if args.test_names:
         # Replace _ with a -
@@ -79,11 +94,9 @@ def sync(args):
 
     file_entries = list(jsonl_in_range(args.country_codes, testnames, args.since, args.until))
     with logging_redirect_tqdm():
-        for file_entry in tqdm(file_entries):
-            mc = download_measurement_container(args.output_dir, file_entry)
-            if args.max_string_size:
-                trim_container(args.output_dir, fe, args.max_string_size)
-
+        with ChosenPool() as pool:
+            func = download_and_trim(args)
+            list(tqdm(pool.imap_unordered(func, file_entries), total=len(file_entries)))
 
 def _parse_date_flag(date_str: str) -> dt.date:
     return dt.datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -96,6 +109,10 @@ def main():
     subparsers = parser.add_subparsers()
 
     parser_sync = subparsers.add_parser("sync", help="Sync OONI measurements")
+    parser_sync.add_argument(
+        "--use-process",
+        action="store_true"
+    )
     parser_sync.add_argument(
         "--country-codes",
         type=str,
