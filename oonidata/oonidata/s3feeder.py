@@ -19,7 +19,7 @@ import os
 import time
 import gzip
 import tarfile
-from multiprocessing import Pool, ThreadPool
+from multiprocessing import Pool
 
 import lz4.frame as lz4frame  # debdeps: python3-lz4
 import ujson
