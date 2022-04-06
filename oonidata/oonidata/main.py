@@ -94,8 +94,8 @@ def sync(args):
 
     file_entries = list(jsonl_in_range(args.country_codes, testnames, args.since, args.until))
     with logging_redirect_tqdm():
+        func = download_and_trim(args)
         with ChosenPool() as pool:
-            func = download_and_trim(args)
             list(tqdm(pool.imap_unordered(func, file_entries), total=len(file_entries)))
 
 def _parse_date_flag(date_str: str) -> dt.date:
