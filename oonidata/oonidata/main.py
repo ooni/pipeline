@@ -1,7 +1,7 @@
 import argparse
 import shutil
 from collections import namedtuple
-from functools import singledispatch
+from functools import singledispatch, partial
 import tempfile
 import os
 import gzip
@@ -71,12 +71,10 @@ def trim_container(s3cachedir: pathlib.Path, fe: FileEntry, max_string_size: int
         raise
 
 
-def download_and_trim(args):
-    def closure(fe):
-        mc = download_measurement_container(args.output_dir, fe)
-        if args.max_string_size:
-            trim_container(args.output_dir, fe, args.max_string_size)
-    return closure
+def download_and_trim(fe, output_dir, max_string_size):
+    mc = download_measurement_container(output_dir, fe)
+    if max_string_size:
+        trim_container(output_dir, fe, max_string_size)
 
 def sync(args):
     ChosenPool = ThreadPool
@@ -94,7 +92,7 @@ def sync(args):
 
     file_entries = list(jsonl_in_range(args.country_codes, testnames, args.since, args.until))
     with logging_redirect_tqdm():
-        func = download_and_trim(args)
+        func = partial(download_and_trim, output_dir=args.output_dir, max_string_size=args.max_string_size)
         with ChosenPool() as pool:
             list(tqdm(pool.imap_unordered(func, file_entries), total=len(file_entries)))
 
