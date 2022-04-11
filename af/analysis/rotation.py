@@ -264,7 +264,7 @@ def create_le_do_ssl_cert():
         certbot_creds,
         "-d",
         "*.th.ooni.org",
-        "-n"
+        "-n",
     ]
     log.info("Creating/refreshing wildcard certificate *.th.ooni.org")
     log.info(" ".join(cmd))
@@ -290,6 +290,29 @@ def scp_file(local_fn: str, host: str, remote_fn: str) -> None:
         dest,
     ]
     log.info("Copying file")
+    log.info(" ".join(cmd))
+    check_output(cmd)
+
+
+@metrics.timer("ssh_poll_setup_end")
+@retry
+def ssh_poll_setup_end(host: str) -> None:
+    """Poll until rotation_setup.sh ends"""
+    cmd = [
+        "ssh",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-o",
+        "ConnectTimeout=10",
+        "-o",
+        "BatchMode=yes",
+        "-i",
+        "/etc/ooni/testhelper_ssh_key",
+        host,
+        "cat",
+        "/var/run/rotation_setup_completed",
+    ]
+    log.info("Polling for the end of rotation_setup.sh")
     log.info(" ".join(cmd))
     check_output(cmd)
 
@@ -336,7 +359,8 @@ def update_or_create_dns_record(api, zone, name, rtype, ip_address, records):
         x = x[0]
         url = f"domains/{zone}/records/{x.id}"
         changes = dict(data=ip_address)
-        log.info(f"Updating existing DNS record {x.id} {rtype} {name} {zone} {ip_address}")
+        msg = f"Updating existing DNS record {x.id} {rtype} {name} {zone} {ip_address}"
+        log.info(msg)
         api.get_data(url, type=digitalocean.baseapi.PUT, params=changes)
         return
 
@@ -415,7 +439,8 @@ def main():
     drain_droplet_if_needed(db_conn, live_droplets, active_droplets_count)
 
     if len(live_droplets) > active_droplets_count:
-        log.info(f"No need to spawn a new droplet {len(live_droplets)} > {active_droplets_count}")
+        msg = f"No need to spawn a new droplet {len(live_droplets)} > {active_droplets_count}"
+        log.info(msg)
         sys.exit(0)
 
     if len(droplets) > active_droplets_count + 2:
@@ -430,6 +455,7 @@ def main():
     live_droplets.append(new_droplet)
 
     create_le_do_ssl_cert()
+    ssh_poll_setup_end(host)
     # Deploy SSL certificate to new droplet
     deploy_ssl_cert(f"root@{new_droplet.ip_address}", dns_zone)
 

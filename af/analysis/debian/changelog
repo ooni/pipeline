@@ -1,3 +1,9 @@
+analysis (0.25.1-ams-pg) unstable; urgency=medium
+
+  * ams-pg fork. Check flag in rotation.py
+
+ -- Federico Ceratto <federico@debian.org>  Mon, 11 Apr 2022 13:25:20 +0100
+
 analysis (0.25) unstable; urgency=medium
 
   * Speed up counter tables upsert
