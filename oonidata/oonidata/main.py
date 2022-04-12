@@ -15,7 +15,6 @@ from typing import List, Generator, Tuple, List
 
 import ujson
 
-from multiprocessing import Pool
 from multiprocessing.pool import ThreadPool
 
 from tqdm import tqdm
@@ -76,12 +75,8 @@ def download_and_trim(fe, output_dir, max_string_size):
     if max_string_size:
         trim_container(output_dir, fe, max_string_size)
 
-def sync(args):
-    ChosenPool = ThreadPool
-    if args.use_process:
-        print("Using process pool")
-        ChosenPool = Pool
 
+def sync(args):
     testnames = []
     if args.test_names:
         # Replace _ with a -
@@ -92,9 +87,11 @@ def sync(args):
 
     file_entries = list(jsonl_in_range(args.country_codes, testnames, args.since, args.until))
     with logging_redirect_tqdm():
-        func = partial(download_and_trim, output_dir=args.output_dir, max_string_size=args.max_string_size)
-        with ChosenPool() as pool:
+        func = partial(download_and_trim, output_dir=args.output_dir,
+                max_string_size=args.max_string_size)
+        with ThreadPool() as pool:
             list(tqdm(pool.imap_unordered(func, file_entries), total=len(file_entries)))
+
 
 def _parse_date_flag(date_str: str) -> dt.date:
     return dt.datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -107,10 +104,6 @@ def main():
     subparsers = parser.add_subparsers()
 
     parser_sync = subparsers.add_parser("sync", help="Sync OONI measurements")
-    parser_sync.add_argument(
-        "--use-process",
-        action="store_true"
-    )
     parser_sync.add_argument(
         "--country-codes",
         type=str,
