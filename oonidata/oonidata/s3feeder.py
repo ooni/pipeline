@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Feeds reports from cans on public S3 bucke or local disk
+Feeds reports from cans on public S3 bucket or local disk
 
 Explore bucket from CLI:
 AWS_PROFILE=ooni-data aws s3 ls s3://ooni-data/canned/2019-07-16/
