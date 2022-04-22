@@ -22,7 +22,7 @@ except ImportError:
     pass
 import ujson
 
-from fastpath.metrics import setup_metrics
+from fastpath.oonidata.metrics import setup_metrics
 
 log = logging.getLogger("fastpath.db")
 metrics = setup_metrics(name="fastpath.db")

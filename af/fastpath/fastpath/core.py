@@ -34,7 +34,7 @@ except ImportError:
     no_journal_handler = True
 
 # Feeds measurements from S3
-import fastpath.s3feeder as s3feeder
+import fastpath.oonidata.s3feeder as s3feeder
 
 # Feeds measurements from a local HTTP API
 from fastpath.localhttpfeeder import start_http_api
@@ -42,11 +42,11 @@ from fastpath.localhttpfeeder import start_http_api
 # Push measurements into Postgres
 import fastpath.db as db
 
-from fastpath.metrics import setup_metrics
-from fastpath.mytypes import MsmtTup
+from fastpath.oonidata.metrics import setup_metrics
+from fastpath.oonidata.mytypes import MsmtTup
 import fastpath.portable_queue as queue
 
-import fastpath.utils
+import fastpath.oonidata.utils
 
 LOCALITY_VALS = ("general", "global", "country", "isp", "local")
 
@@ -725,7 +725,7 @@ def get_http_header(resp, header_name, case_sensitive=False):
 
     # backward compatibility with older measurements that don't have
     # header_list
-    if "header_list" not in resp:
+    if "headers_list" not in resp:
         headers = resp.get("headers", {})
         header_list = [[h,v] for h,v in headers.items()]
     else:
@@ -1617,7 +1617,7 @@ def setup_fingerprints():
     fingerprints = {
         "ZZ": {"body_match": [], "header_prefix": [], "header_full": [], "dns_full": []}
     }
-    for cc, fprints in fastpath.utils.fingerprints.items():
+    for cc, fprints in fastpath.oonidata.utils.fingerprints.items():
         d = fingerprints.setdefault(cc, {})
         for fp in fprints:
             assert fp["locality"] in LOCALITY_VALS, fp["locality"]

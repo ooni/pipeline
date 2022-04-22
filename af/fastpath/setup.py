@@ -11,7 +11,7 @@ REQUIRED = []
 setup(
     name=NAME,
     python_requires=">=3.7.0",
-    packages=["fastpath", "fastpath.tests"],
+    packages=["fastpath", "fastpath.oonidata", "fastpath.tests"],
     entry_points={"console_scripts": [
         "fastpath=fastpath.core:main",
         "reprocessor=fastpath.reprocessor:main",
