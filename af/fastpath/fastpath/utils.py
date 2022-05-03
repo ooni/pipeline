@@ -369,6 +369,11 @@ fingerprints = {
         {"body_match": "<title>Web Page Blocked</title>", "locality": "local"},
     ],
     "ID": [
+        #https://explorer.ooni.org/measurement/20220423T015209Z_webconnectivity_ID_4761_n1_no3oWQDwZrqTqv44?input=http%3A%2F%2Fwww.glil.org%2F
+        {
+            "header_name": "Location",
+            "header_prefix": "http://lamanlabuh.aduankonten.id",
+        },
         {
             "header_name": "Location",
             "header_prefix": "http://internet-positif.org",
@@ -850,6 +855,12 @@ fingerprints = {
         {"dns_full": "203.82.48.83", "locality": "isp"},
         # https://explorer.ooni.org/measurement/20191206T015807Z_AS23674_BbXvUMwowxajbM9Q1pTeOp84pawo9ccTUsltC6B1vhyNHC2kkM?input=http://gaytoday.com/
         {"dns_full": "203.82.48.86", "locality": "isp"},
+        # https://explorer.ooni.org/measurement/20210630T080326Z_webconnectivity_PK_23674_n1_EYqJhroCDCvkLcOY?input=http%3A%2F%2Fwww.urduvoa.com%2F
+        # https://explorer.ooni.org/measurement/20210308T121231Z_webconnectivity_PK_23674_n1_Pf3ltJKx54K3EYvb?input=http%3A%2F%2Fwww.voadeewanews.com%2F
+        {
+            "body match": "The site you are trying to access contains content that is prohibited for viewership from within Pakistan due to PTA restriction",
+            "locality": "isp"
+        },
     ],
     "PL": [
         # https://github.com/ooni/pipeline/issues/224
