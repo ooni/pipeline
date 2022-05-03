@@ -373,6 +373,7 @@ fingerprints = {
         {
             "header_name": "Location",
             "header_prefix": "http://lamanlabuh.aduankonten.id",
+            "locality": "country",
         },
         {
             "header_name": "Location",
