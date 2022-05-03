@@ -859,7 +859,7 @@ fingerprints = {
         # https://explorer.ooni.org/measurement/20210308T121231Z_webconnectivity_PK_23674_n1_Pf3ltJKx54K3EYvb?input=http%3A%2F%2Fwww.voadeewanews.com%2F
         {
             "body match": "The site you are trying to access contains content that is prohibited for viewership from within Pakistan due to PTA restriction",
-            "locality": "isp"
+            "locality": "isp",
         },
     ],
     "PL": [
