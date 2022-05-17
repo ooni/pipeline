@@ -1,3 +1,9 @@
+fastpath (0.56legacy.1) unstable; urgency=medium
+
+  * [legacy branch] Fix Telegram spelling
+
+ -- Federico Ceratto <federico@debian.org>  Tue, 17 May 2022 11:54:27 +0100
+
 fastpath (0.56) unstable; urgency=medium
 
   * Handle RiseUp VPS transport_status set to None
