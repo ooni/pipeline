@@ -279,7 +279,7 @@ def test_telegram(cans):
                 "unreachable_endpoints": 0,
                 "http_success_cnt": 10,
                 "http_failure_cnt": 0,
-                "msg": "Telegram failure: connection_reset",
+                "msg": "failure: connection_reset",
             }
         elif rid == "20190829T210302Z_AS197207_28cN0a47WSIxF3SZlXvceoLCSk3rSkyeg0n07pKGAi7XYyEQXM":
             assert scores == {
@@ -293,7 +293,7 @@ def test_telegram(cans):
                 "unreachable_endpoints": 10,
                 "http_success_cnt": 0,
                 "http_failure_cnt": 10,
-                "msg": "Telegram failure: generic_timeout_error",
+                "msg": "failure: generic_timeout_error",
             }
         elif rid == "20190829T220118Z_AS16345_28eP4Hw7PQsLmb4eEPWitNvIZH8utHddaTbWZ9qFcaZudmHPfz":
             assert scores == {
@@ -307,7 +307,7 @@ def test_telegram(cans):
                 "unreachable_endpoints": 10,
                 "http_success_cnt": 0,
                 "http_failure_cnt": 10,
-                "msg": "Telegram failure: connect_error",
+                "msg": "failure: connect_error",
             }
 
 
