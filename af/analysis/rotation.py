@@ -98,7 +98,7 @@ def retry(func):
     return wrapped
 
 
-def add_droplet_to_db_table(db_conn, dr):
+def add_droplet_to_db_table(db_conn, dr) -> None:
     vals = [dr.name, dr.region["slug"], dr.ip_address, dr.ip_v6_address]
     q = """INSERT INTO test_helper_instances
         (name, provider, region, ipaddr, ipv6addr)
@@ -109,7 +109,7 @@ def add_droplet_to_db_table(db_conn, dr):
         db_conn.commit()
 
 
-def drain_droplet_in_db_table(db_conn, dr):
+def drain_droplet_in_db_table(db_conn, dr) -> None:
     q = """UPDATE test_helper_instances
     SET draining_at = NOW()
     WHERE name = %s AND provider = 'Digital Ocean' AND region = %s
@@ -120,7 +120,7 @@ def drain_droplet_in_db_table(db_conn, dr):
         db_conn.commit()
 
 
-def delete_droplet_from_db_table(db_conn, dr):
+def delete_droplet_from_db_table(db_conn, dr) -> None:
     q = """DELETE FROM test_helper_instances
     WHERE name = %s AND provider = 'Digital Ocean' AND region = %s
     """
@@ -131,7 +131,9 @@ def delete_droplet_from_db_table(db_conn, dr):
 
 
 @metrics.timer("destroy_drained_droplets")
-def destroy_drained_droplets(db_conn, api, draining_time_minutes, live_droplets):
+def destroy_drained_droplets(
+    db_conn, api, draining_time_minutes: int, live_droplets
+) -> None:
     q = """SELECT name FROM test_helper_instances
     WHERE provider = 'Digital Ocean'
     AND draining_at IS NOT NULL
@@ -157,7 +159,7 @@ def destroy_drained_droplets(db_conn, api, draining_time_minutes, live_droplets)
 
 
 @metrics.timer("spawn_new_droplet")
-def spawn_new_droplet(api, dig_oc_token, live_regions, conf):
+def spawn_new_droplet(api, dig_oc_token: str, live_regions, conf):
     regions = set(r.slug for r in api.get_all_regions() if r.available is True)
     preferred_regions = regions - live_regions
 
@@ -224,7 +226,7 @@ def load_conf():
     return cp["DEFAULT"]
 
 
-def drain_droplet_if_needed(db_conn, live_droplets, active_droplets_count):
+def drain_droplet_if_needed(db_conn, live_droplets: list, active_droplets_count: int):
     q = """SELECT name FROM test_helper_instances
         WHERE provider = 'Digital Ocean'
         AND draining_at IS NULL
@@ -243,7 +245,7 @@ def drain_droplet_if_needed(db_conn, live_droplets, active_droplets_count):
 
 
 @metrics.timer("create_le_do_ssl_cert")
-def create_le_do_ssl_cert():
+def create_le_do_ssl_cert() -> None:
     """Create/renew Let's Encrypt SSL Certificate through the Digital Ocean API
 
     Namecheap DNS entry to delegate to DO:
@@ -264,7 +266,7 @@ def create_le_do_ssl_cert():
         certbot_creds,
         "-d",
         "*.th.ooni.org",
-        "-n"
+        "-n",
     ]
     log.info("Creating/refreshing wildcard certificate *.th.ooni.org")
     log.info(" ".join(cmd))
@@ -336,7 +338,8 @@ def update_or_create_dns_record(api, zone, name, rtype, ip_address, records):
         x = x[0]
         url = f"domains/{zone}/records/{x.id}"
         changes = dict(data=ip_address)
-        log.info(f"Updating existing DNS record {x.id} {rtype} {name} {zone} {ip_address}")
+        m = f"Updating existing DNS record {x.id} {rtype} {name} {zone} {ip_address}"
+        log.info(m)
         api.get_data(url, type=digitalocean.baseapi.PUT, params=changes)
         return
 
@@ -379,7 +382,7 @@ def deploy_ssl_cert(host: str, zone: str) -> None:
 
 
 @metrics.timer("run_time")
-def main():
+def main() -> None:
     conf = load_conf()
 
     dig_oc_token = conf["token"]
@@ -415,7 +418,8 @@ def main():
     drain_droplet_if_needed(db_conn, live_droplets, active_droplets_count)
 
     if len(live_droplets) > active_droplets_count:
-        log.info(f"No need to spawn a new droplet {len(live_droplets)} > {active_droplets_count}")
+        m = f"No need to spawn a new droplet {len(live_droplets)} > {active_droplets_count}"
+        log.info(m)
         sys.exit(0)
 
     if len(droplets) > active_droplets_count + 2:
