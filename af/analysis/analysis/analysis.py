@@ -44,7 +44,6 @@ from analysis import backup_to_s3
 
 try:
     from systemd.journal import JournalHandler  # debdeps: python3-systemd
-    import sdnotify  # debdeps: python3-sdnotify
 
     has_systemd = True
 except ImportError:
@@ -63,7 +62,7 @@ log = logging.getLogger("analysis")
 metrics = setup_metrics(name="analysis")
 
 
-def parse_args():
+def parse_args() -> Namespace:
     ap = ArgumentParser("Analysis script " + __doc__)
     ap.add_argument(
         "--update-citizenlab", action="store_true", help="Update citizenlab test lists"
@@ -80,7 +79,7 @@ def parse_args():
     return ap.parse_args()
 
 
-def main():
+def main() -> None:
     global conf
     log.info("Analysis starting")
     cp = ConfigParser()
@@ -95,9 +94,6 @@ def main():
     else:
         log.addHandler(JournalHandler(SYSLOG_IDENTIFIER="analysis"))
         log.setLevel(logging.DEBUG)
-
-    for role in ("active", "standby"):
-        setattr(conf, role, dict(cp[role]))
 
     log.info("Logging started")
     conf.output_directory = (
