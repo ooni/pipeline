@@ -247,8 +247,9 @@ def spawn_new_droplet(api, dig_oc_token: str, live_regions, conf):
             if action.status == "completed":
                 log.info("Spawning completed, waiting warmup")
                 new_droplet = api.get_droplet(droplet.id)
-                ssh_wait_droplet_warmup(new_droplet.ip_address)
-                return new_droplet
+                if new_droplet.ip_address:
+                    ssh_wait_droplet_warmup(new_droplet.ip_address)
+                    return new_droplet
 
         log.debug("Waiting for droplet to start")
 
@@ -508,7 +509,7 @@ def main() -> None:
     dns_zone = conf["dns_zone"]
     assert dns_zone
 
-    click = Clickhouse("localhost")
+    click = Clickhouse("localhost", user="rotation")
     api = digitalocean.Manager(token=dig_oc_token)
     # Fetch all test-helper droplets
     droplets = api.get_all_droplets(tag_name=TAG)
