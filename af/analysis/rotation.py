@@ -68,6 +68,7 @@ from datetime import datetime
 from functools import wraps
 from subprocess import check_output
 from pathlib import Path
+from ipaddress import IPv4Address as IP4a, IPv6Address as IP6a
 import logging
 import random
 import sys
@@ -77,6 +78,7 @@ import time
 from clickhouse_driver import Client as Clickhouse
 import statsd  # debdeps: python3-statsd
 import digitalocean  # debdeps: python3-digitalocean
+import requests  # debdeps: python3-requests
 
 metrics = statsd.StatsClient("127.0.0.1", 8125, prefix="rotation")
 
@@ -154,7 +156,9 @@ def drain_droplet_in_db_table(click, dr, rdn: str, dns_zone: str) -> None:
     insert(click, "test_helper_instances", cols)
 
 
-def delete_droplet_from_db_table(click, dr, rdn: str, draining_at, dns_zone: str) -> None:
+def delete_droplet_from_db_table(
+    click, dr, rdn: str, draining_at, dns_zone: str
+) -> None:
     cols = dict(
         dns_zone=dns_zone,
         draining_at=draining_at,
@@ -346,9 +350,9 @@ def scp_file(local_fn: str, host: str, remote_fn: str) -> None:
     check_output(cmd)
 
 
-@metrics.timer("ssh_reload_nginx")
+@metrics.timer("ssh_restart_nginx")
 @retry
-def ssh_reload_nginx(host: str) -> None:
+def ssh_restart_nginx(host: str) -> None:
     """Reload Nginx over SSH"""
     cmd = [
         "ssh",
@@ -362,7 +366,7 @@ def ssh_reload_nginx(host: str) -> None:
         "/etc/ooni/testhelper_ssh_key",
         f"{host}",
         "systemctl",
-        "reload",
+        "restart",
         "nginx",
     ]
     log.info("Reloading nginx")
@@ -468,7 +472,7 @@ def deploy_ssl_cert(host: str, zone: str) -> None:
     scp_file(cert_fname, host, "/etc/ssl/private/th_fullchain.pem")
     scp_file(privkey_fname, host, "/etc/ssl/private/th_privkey.pem")
     scp_file(nginx_conf, host, "/etc/nginx/sites-enabled/default")
-    ssh_reload_nginx(host)
+    ssh_restart_nginx(host)
 
 
 def assign_rdn(click, dns_zone: str, wanted_droplet_num: int) -> str:
@@ -490,6 +494,26 @@ def assign_rdn(click, dns_zone: str, wanted_droplet_num: int) -> str:
             return rdn
 
     raise Exception("Unable to pick an RDN")
+
+
+@metrics.timer("end_to_end_test")
+def end_to_end_test(ipaddr: IP4a, fqdn: str) -> None:
+    # Test the new TH with real traffic
+    j = {
+        "http_request": "https://google.com/",
+        "http_request_headers": {},
+        "tcp_connect": ["8.8.8.8:443"],
+    }
+    hdr = {"Host": fqdn, "Pragma": "no-cache"}
+    log.info(f"Testing {fqdn}")
+    r = requests.post(f"https://{ipaddr}", headers=hdr, verify=False, json=j)
+    if r.ok and sorted(r.json()) == ['dns', 'http_request', 'tcp_connect']:
+        log.info(f"Test successful")
+        return
+
+    log.error(f"Failed end to end test: {r.status_code}\nHeaders: {r.headers}")
+    log.error(f"Body: {r.text}")
+    raise Exception("End to end test failed")
 
 
 @metrics.timer("run_time")
@@ -549,8 +573,8 @@ def main() -> None:
     live_droplets.append(new_droplet)
 
     create_le_do_ssl_cert(dns_zone)
-    # Deploy SSL certificate to new droplet
     deploy_ssl_cert(f"root@{new_droplet.ip_address}", dns_zone)
+    end_to_end_test(new_droplet.ip_address, f"{rdn}.dns_zone")
 
     # Update DNS A/AAAA records only when a new droplet is deployed
     update_dns_records(click, dig_oc_token, dns_zone, live_droplets)
