@@ -415,6 +415,7 @@ def delete_dns_record(api, zone: str, name: str, ip_address, rtype, dig_oc_token
 
 
 def update_or_create_dns_record(api, zone, name, rtype, ip_address, records):
+    ip_address = str(ip_address)
     x = [r for r in records if r.name == name and r.type == rtype]
     if x:
         x = x[0]
