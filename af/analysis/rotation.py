@@ -360,7 +360,7 @@ def ssh_reload_nginx(host: str) -> None:
         "BatchMode=yes",
         "-i",
         "/etc/ooni/testhelper_ssh_key",
-        f"root@{host}",
+        f"{host}",
         "systemctl",
         "reload",
         "nginx",
