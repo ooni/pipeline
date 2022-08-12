@@ -125,8 +125,8 @@ TODO
 
 ### API runbook
 
-Monitor the [API](https://mon.ooni.nu/grafana/d/CkdDBscGz/ams-pg-api?orgId=1) and 
-[fastpath](https://mon.ooni.nu/grafana/d/75nnWVpMz/fastpath-ams-pg?orgId=1) dashboards.
+Monitor the [API](https://grafana.ooni.org/d/CkdDBscGz/ams-pg-api?orgId=1) and 
+[fastpath](https://grafana.ooni.org/d/75nnWVpMz/fastpath-ams-pg?orgId=1) dashboards (needs login).
 
 Follow Nginx or API logs with:
 ```bash
@@ -172,7 +172,8 @@ fastpath --start-day 2016-05-13 --end-day 2016-05-14 --stdout --update
 The fastpath will pull cans from S3.
 The daemon (doing real-time processing) can keep running in the meantime.
 
-[Progress chart](https://mon.ooni.nu/prometheus/new/graph?g0.expr=netdata_statsd_gauge_fastpath_s3feeder_s3_download_percentage_value_average%7Bdimension%3D%22gauge%22%7D&g0.tab=0&g0.stacked=1&g0.range_input=2h&g1.expr=netdata_statsd_gauge_fastpath_load_s3_reports_remaining_files_value_average%7Bdimension%3D%22gauge%22%7D&g1.tab=0&g1.stacked=1&g1.range_input=1h)
+[Progress chart](https://prometheus.ooni.org/new/graph?g0.expr=netdata_statsd_gauge_fastpath_s3feeder_s3_download_percentage_value_average%7Bdimension%3D%22gauge%22%7D&g0.tab=0&g0.stacked=1&g0.range_input=2h&g1.expr=netdata_statsd_gauge_fastpath_load_s3_reports_remaining_files_value_average%7Bdimension%3D%22gauge%22%7D&g1.tab=0&g1.stacked=1&g1.range_input=1h)
+
 #### Log monitoring
 
 ```bash
@@ -181,7 +182,7 @@ sudo journalctl -f -u fastpath
 
 #### Monitoring dashboard
 
-[https://mon.ooni.nu/grafana/d/75nnWVpMz/fastpath-ams-pg?orgId=1&refresh=5m&from=now-7d&to=now](https://mon.ooni.nu/grafana/d/75nnWVpMz/fastpath-ams-pg?orgId=1&refresh=5m&from=now-7d&to=now)
+[https://grafana.ooni.org/d/75nnWVpMz/fastpath-ams-pg?orgId=1&refresh=5m&from=now-7d&to=now](https://grafana.ooni.org/d/75nnWVpMz/fastpath-ams-pg?orgId=1&refresh=5m&from=now-7d&to=now)
 
 ### Analysis runbook
 
@@ -210,7 +211,7 @@ sudo journalctl -f --identifier analysis
 
 #### Monitoring dashboard
 
-[https://mon.ooni.nu/grafana/d/75nnWVpMz/fastpath-ams-pg?orgId=1&refresh=5m&from=now-7d&to=now](https://mon.ooni.nu/grafana/d/75nnWVpMz/fastpath-ams-pg?orgId=1&refresh=5m&from=now-7d&to=now)
+[https://grafana.ooni.org/d/75nnWVpMz/fastpath-ams-pg?orgId=1&refresh=5m&from=now-7d&to=now](https://grafana.ooni.org/d/75nnWVpMz/fastpath-ams-pg?orgId=1&refresh=5m&from=now-7d&to=now)
 
 ### Deploy new host
 
