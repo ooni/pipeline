@@ -902,17 +902,28 @@ def score_vanilla_tor(msm):
     if msm["software_name"] == "ooniprobe" and all_keys_none(tk, nks):
         if tk["tor_progress"] == 0:
             # client bug?
+            scores["accuracy"] = 0.0
             scores["msg"] = "Client bug"
             return scores
 
-    tor_log = tk.get("tor_log")
-    if tor_log is None:
+    tor_logs = []
+    # Handle incompatibility with legacy test:
+    # https://github.com/ooni/spec/blob/master/nettests/ts-016-vanilla-tor.md#incompatibility-with-ooniprobe-legacy
+    if "tor_logs" in tk and tk["tor_logs"]:
+        tor_logs = tk["tor_logs"]
+    elif "tor_log" in tk and tk["tor_log"]:
+        tor_logs = tk["tor_log"].split("\n")
+
+    if len(tor_logs) == 0:
         # unknown bug
+        scores["accuracy"] = 0.0
         return scores
 
-    if (
-        "Bootstrapped 100%: Done" in tor_log
-        or "Bootstrapped 100% (done): Done" in tor_log
+    if any(
+        [
+            "Bootstrapped 100%: Done" in tl or "Bootstrapped 100% (done): Done" in tl
+            for tl in tor_logs
+        ]
     ):
         # Success
         return scores
