@@ -484,6 +484,24 @@ def test_score_torsf2():
     }
 
 
+def test_score_vanilla_tor():
+    msm = loadj("vanilla_tor_bad_new")
+    scores = fp.score_measurement(msm)
+    assert scores["blocking_general"] > 0
+
+    msm = loadj("vanilla_tor_bad_old")
+    scores = fp.score_measurement(msm)
+    assert scores["blocking_general"] > 0
+
+    msm = loadj("vanilla_tor_good_new")
+    scores = fp.score_measurement(msm)
+    assert scores["blocking_general"] == 0
+
+    msm = loadj("vanilla_tor_good_old")
+    scores = fp.score_measurement(msm)
+    assert scores["blocking_general"] == 0
+
+
 # # Bug tests
 
 
