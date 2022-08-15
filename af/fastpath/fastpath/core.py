@@ -909,9 +909,9 @@ def score_vanilla_tor(msm):
     tor_logs = []
     # Handle incompatibility with legacy test:
     # https://github.com/ooni/spec/blob/master/nettests/ts-016-vanilla-tor.md#incompatibility-with-ooniprobe-legacy
-    if "tor_logs" in tk and tk["tor_logs"]:
+    if tk.get("tor_logs"):
         tor_logs = tk["tor_logs"]
-    elif "tor_log" in tk and tk["tor_log"]:
+    elif tk.get("tor_log"):
         tor_logs = tk["tor_log"].split("\n")
 
     if len(tor_logs) == 0:
