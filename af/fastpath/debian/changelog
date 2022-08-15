@@ -1,3 +1,9 @@
+fastpath (0.59) unstable; urgency=medium
+
+  * Fix vanilla_tor https://github.com/ooni/backend/issues/608
+
+ -- Federico Ceratto <federico@debian.org>  Mon, 15 Aug 2022 16:17:07 +0100
+
 fastpath (0.58) unstable; urgency=medium
 
   * Add DNS fingerprints for Iran
