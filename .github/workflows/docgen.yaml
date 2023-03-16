@@ -16,6 +16,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v1
+      - name: Adding markdown
+        run: echo '### Hello world! ' >> $GITHUB_STEP_SUMMARY
       - name: Install deps
         run: sudo apt-get -y --no-install-recommends install python3-markdown python3-blockdiag
       - name: Run docgen
@@ -28,3 +30,4 @@ jobs:
           build_dir: build_docs_output
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
