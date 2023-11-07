@@ -6,12 +6,52 @@ Can be used from CLI and as a Python module
 """
 
 from argparse import ArgumentParser
+from pathlib import Path
+from difflib import context_diff
+import subprocess
 
 # Refresh / compare using
 # ssh ams-pg.ooni.org -t pg_dump metadb -U shovel --schema-only | \
 # grep -v  '^-' | uniq |  sed 's/\r$//' > database_upgrade_schema.sql
 #
 # meld database_upgrade_schema.py database_upgrade_schema.sql
+
+DBNAME = "metadb"
+DBUSER = "shovel"
+
+
+def pg_dump(dbname, dbuser):
+    cmd = ["pg_dump", dbname, "-U", dbuser, "--schema-only"]
+    return subprocess.check_output(cmd).decode()
+
+
+def pg_dump_sorted(dbname, dbuser):
+    lines = pg_dump(dbname, dbuser).splitlines()
+    lines = [i for i in lines if not i.startswith("--")]
+    lines = [i.rstrip() for i in lines]
+    chunks = "\n".join(lines).split(";")
+    chunks = [c.strip() for c in chunks if c.strip()]
+    return sorted(chunks)
+
+
+def diff_local_db_vs_file(conf):
+    fname = conf.diff
+    file_chunks = Path(fname).read_text().split(";\n")
+    if file_chunks[-1] == "":
+        file_chunks.pop()
+
+    db_chunks = pg_dump_sorted(conf.dbname, conf.dbuser)
+    g = context_diff(db_chunks, file_chunks, fromfile="DB", tofile=fname)
+    g = list(g)
+    for i in g:
+        print(i)
+
+
+def save_local_db_schema(conf):
+    f = Path(conf.save)
+    db_chunks = pg_dump_sorted(conf.dbname, conf.dbuser)
+    out = ";\n".join(db_chunks) + ";\n"
+    f.write_text(out)
 
 
 def db_setup():
@@ -263,13 +303,15 @@ def db_drop():
     raise NotImplementedError
 
 
-steps = (
-    (db_setup, db_drop),
-)
+steps = ((db_setup, db_drop),)
 
 if __name__ == "__main__":
     ap = ArgumentParser()
     ap.add_argument("--list", action="store_true", help="list steps")
+    ap.add_argument("--diff", help="diff local DB schema and sql file")
+    ap.add_argument("--save", help="save local DB schema to sql file")
+    ap.add_argument("--dbname", default=DBNAME)
+    ap.add_argument("--dbuser", default=DBUSER)
     conf = ap.parse_args()
 
     if conf.list:
@@ -277,3 +319,9 @@ if __name__ == "__main__":
             print(f"{rf.__name__} - {rf.__doc__}")
             print(f"  {rollback.__name__} - {rollback.__doc__}")
             print()
+
+    elif conf.diff:
+        diff_local_db_vs_file(conf)
+
+    elif conf.save:
+        save_local_db_schema(conf)
